@@ -16,6 +16,7 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm test:worker
       - run: pnpm build
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:

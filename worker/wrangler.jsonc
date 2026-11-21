@@ -27,11 +27,22 @@
         "limit": 3,
         "period": 60
       }
+    },
+    {
+      "name": "POS_SYNC_LIMITER",
+      "namespace_id": "1003",
+      "simple": {
+        "limit": 6,
+        "period": 60
+      }
     }
   ],
   "triggers": {
     "crons": [
       "*/10 * * * *"
     ]
+  },
+  "vars": {
+    "POS_SYNC_ENABLED": "false"
   }
 }

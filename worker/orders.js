@@ -78,3 +78,6 @@ export async function sweep(env){
  // At most ten changed orders per pass, safely below the free 50-subrequest limit.
  if(handled++>=10)break;const id=d.name.split('/').pop();try{await notify(env,id,{data,updateTime:d.updateTime});}catch{}}
 }
+
+// Private gateway shares the existing service credential and Firestore codec.
+export const posDatabase={request:db,fields,object,name:NAME};
