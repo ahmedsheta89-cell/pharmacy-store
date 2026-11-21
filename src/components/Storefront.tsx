@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { CATEGORIES, PRODUCTS, formatPrice, type Product } from "../lib/catalog";
+import { STORE } from "../lib/site";
 import { useCart } from "../lib/cart";
 import ProductImage from "./ProductImage";
 import CartDrawer from "./CartDrawer";
@@ -88,8 +89,8 @@ export default function Storefront() {
               </svg>
             </span>
             <span>
-              <span className="block text-base font-black leading-4 text-brand-900">صيدلية الحواري</span>
-              <span className="block text-[10px] font-medium tracking-wide text-slate-500">EL HAWARY PHARMACY</span>
+              <span className="block text-base font-black leading-4 text-brand-900">{STORE.name}</span>
+              <span className="block text-[10px] font-medium tracking-wide text-slate-500">ONE FOR ALL GOOD</span>
             </span>
           </a>
           <div className="relative mx-auto hidden w-full max-w-md sm:block">
@@ -142,7 +143,7 @@ export default function Storefront() {
             <span className="text-gold-300">لحد باب البيت.</span>
           </h1>
           <p className="mt-4 max-w-xl text-sm leading-7 text-brand-100 sm:text-base">
-            اطلب من صيدلية الحواري أونلاين: أدوية، فيتامينات، عناية بالبشرة والشعر، مستلزمات أطفال وأجهزة طبية. اطلب في دقيقة، والدفع كاش عند الاستلام.
+            اطلب من {STORE.name} أونلاين: أدوية، فيتامينات، عناية بالبشرة والشعر، مستلزمات أطفال وأجهزة طبية. اطلب في دقيقة، والدفع كاش عند الاستلام.
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
             <a href="#catalog" className="rounded-xl bg-gold-400 px-6 py-3 text-sm font-black text-brand-950 transition hover:bg-gold-300 active:scale-95">
@@ -243,7 +244,7 @@ export default function Storefront() {
               <span className="grid size-9 place-items-center rounded-xl bg-brand-800 text-gold-300">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="size-4"><path d="M12 5v14M5 12h14" /></svg>
               </span>
-              <span className="text-base font-black text-white">صيدلية الحواري</span>
+              <span className="text-base font-black text-white">{STORE.name}</span>
             </div>
             <p className="mt-3 text-xs leading-6 text-brand-200">
               صيدليتك الموثوقة أونلاين. اطلب بسهولة، وادفع عند الاستلام.
@@ -258,12 +259,21 @@ export default function Storefront() {
           <div>
             <h4 className="text-sm font-bold text-white">تحتاج مساعدة؟</h4>
             <p className="mt-2 text-xs leading-6">فريقنا جاهز للرد على استفساراتك وطلباتك الخاصة.</p>
+            <a
+              href={`https://wa.me/${STORE.whatsappNumber}`}
+              target="_blank"
+              rel="noreferrer"
+              dir="ltr"
+              className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-bold text-white hover:bg-white/20"
+            >
+              واتساب: {STORE.whatsappDisplay}
+            </a>
             <a href="/admin" className="mt-4 inline-block text-[11px] text-brand-400 underline-offset-4 hover:underline">
               دخول الإدارة
             </a>
           </div>
         </div>
-        <p className="mt-8 text-center text-[11px] text-brand-400">© 2026 صيدلية الحواري - جميع الحقوق محفوظة</p>
+        <p className="mt-8 text-center text-[11px] text-brand-400">© 2026 {STORE.name} - جميع الحقوق محفوظة</p>
       </footer>
 
       <CartDrawer />

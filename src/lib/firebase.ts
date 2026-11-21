@@ -10,10 +10,10 @@ import {
 
 // Firebase web config is public by design - security is enforced by Firestore rules.
 const FIREBASE_CONFIG = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY ?? "",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ?? "",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID ?? "",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID ?? "",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY ?? "AIzaSyCsRvLEcaGr1DV6a6HFHmR4Xe9mzqgpApQ",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ?? "one-for-all-good.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID ?? "one-for-all-good",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID ?? "1:286528426482:web:d3fe576f3043fe2c0a5b6b",
 };
 
 let app: FirebaseApp | null = null;
