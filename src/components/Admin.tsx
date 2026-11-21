@@ -6,6 +6,7 @@ import {
   watchFeedback, type OrderFeedback, type StoreOrder, type StoreProduct,
 } from "../lib/firebase";
 import { STORE } from "../lib/site";
+import CatalogExcel from "./CatalogExcel";
 import ProductReviewFields from "./ProductReviewFields";
 import BannersPanel from "./BannersPanel";
 
@@ -218,6 +219,7 @@ function ProductsPanel() {
         <button onClick={startAdd} className="rounded-xl bg-brand-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-800">+ إضافة منتج</button>
       </div>
       {error && <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{error}</p>}
+      <CatalogExcel products={products}/>
       {products.length === 0 ? (
         <div className="rounded-2xl border border-brand-100 bg-white p-10 text-center">
           <p className="font-black text-brand-950">لا توجد منتجات في قاعدة البيانات بعد</p>

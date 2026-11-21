@@ -25,3 +25,21 @@ Zero stock and requested quantities above the recorded amount cannot be ordered.
 Concurrent COD requests are confirmed by the pharmacy before fulfillment; this is not
 an automatic inventory-reservation system. Import/export must never infer clinical
 approval or advertising eligibility from column names or item categories.
+
+## XLSX gateway
+
+`CatalogExcel` accepts XLSX value-only workbooks up to 8 MB compressed / 40 MB
+uncompressed, 1000 product rows and 150 columns per sheet. It rejects formula cells,
+ZIP64 and malformed ZIP directories. The user selects the sheet and reviews suggested
+column mappings. Ambiguous headers remain unmapped. Required name/price, duplicate
+IDs, existing IDs, precise prices, integer stock, and HTTPS image references are checked
+before any write. Existing IDs require explicit update permission. A final review
+checkbox enables commit. Each chunk (200 rows) is atomic; a failure reports the number
+saved, and IDs make retries idempotent. No rows are deleted by import.
+
+All imports become private unreviewed drafts, including updates to previously published
+items. File/sheet provenance is `import_source`; clinical provenance is not invented.
+The XLSX export uses stable field names for POS compatibility, Arabic instructions,
+RTL sheets, frozen headers, filters, numeric prices, wrapped text and typed string cells.
+Formula-like text stays text. ExcelJS is loaded only when needed; no workbook contents
+are sent to an external analysis service.

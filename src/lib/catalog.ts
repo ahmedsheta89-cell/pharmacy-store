@@ -9,6 +9,7 @@ import type { StoreProduct as Product } from "./firebase";
 
 export const CATEGORIES: Category[] = [
   { id: "all", name: "الكل", icon: "grid" },
+  { id: "uncategorized", name: "غير مصنف", icon: "grid" },
   { id: "medicine", name: "أدوية ومسكنات", icon: "pill" },
   { id: "cold", name: "برد وحساسية", icon: "thermometer" },
   { id: "vitamins", name: "فيتامينات ومكملات", icon: "sparkles" },
