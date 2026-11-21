@@ -19,6 +19,19 @@
         "limit": 8,
         "period": 60
       }
+    },
+    {
+      "name": "ORDER_LIMITER",
+      "namespace_id": "1002",
+      "simple": {
+        "limit": 3,
+        "period": 60
+      }
     }
-  ]
+  ],
+  "triggers": {
+    "crons": [
+      "*/10 * * * *"
+    ]
+  }
 }

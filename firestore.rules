@@ -6,22 +6,8 @@ service cloud.firestore {
     }
     // Private customer records are never readable without manager identity.
     match /orders/{orderId} {
-      allow create: if
-        request.resource.data.keys().hasAll(['customer_name', 'customer_phone', 'customer_address', 'total', 'items', 'status', 'code'])
-        && request.resource.data.customer_name is string
-        && request.resource.data.customer_name.size() <= 100
-        && request.resource.data.customer_phone is string
-        && request.resource.data.customer_phone.size() <= 20
-        && request.resource.data.customer_address is string
-        && request.resource.data.customer_address.size() <= 500
-        && request.resource.data.total is number
-        && request.resource.data.total >= 0
-        && request.resource.data.total <= 1000000
-        && request.resource.data.items is list
-        && request.resource.data.items.size() <= 50
-        && request.resource.data.status == 'new'
-        && request.resource.data.code is string
-        && request.resource.data.code.size() <= 20;
+      // Checkout is validated by the free Worker backend using a dedicated service identity.
+      allow create: if false;
       allow read, update, delete: if isManager();
     }
 
@@ -36,16 +22,7 @@ service cloud.firestore {
     match /tracking/{trackingId} {
       allow get: if true;
       allow list: if isManager();
-      allow create: if
-        request.resource.data.keys().hasOnly(['order_id', 'status', 'total', 'created_at', 'history'])
-        && request.resource.data.order_id is string
-        && request.resource.data.status == 'new'
-        && request.resource.data.total is number
-        && request.resource.data.created_at is string
-        && (!('history' in request.resource.data) || (request.resource.data.history is list && request.resource.data.history.size() == 1 && request.resource.data.history[0].status == 'new'))
-        && trackingId.size() == 64
-        && getAfter(/databases/$(database)/documents/orders/$(request.resource.data.order_id)).data.tracking_id == trackingId
-        && getAfter(/databases/$(database)/documents/orders/$(request.resource.data.order_id)).data.total == request.resource.data.total;
+      allow create: if false;
       allow update, delete: if isManager();
     }
     match /banners/{bannerId} {

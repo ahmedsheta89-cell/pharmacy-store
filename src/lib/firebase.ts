@@ -73,11 +73,6 @@ export async function trackingKey(code: string, phone: string): Promise<string> 
   return Array.from(new Uint8Array(digest), (n) => n.toString(16).padStart(2, "0")).join("");
 }
 
-function orderCode(): string {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  return Array.from(crypto.getRandomValues(new Uint8Array(12)), (n) => alphabet[n & 31]).join("");
-}
-
 export type StatusEvent = { status: StoreOrder["status"]; at: string };
 export type OrderTracking = { status: StoreOrder["status"]; total: number; created_at: string; expected_at?: string | null; history?: StatusEvent[] };
 
@@ -93,25 +88,22 @@ export async function lookupOrder(code: string, phone: string): Promise<OrderTra
 export async function placeOrder(payload: OrderPayload): Promise<PlaceOrderResult> {
   const ctx = ensure();
   if (!ctx) return { ok: false, reason: "not_configured" };
-  const code = orderCode();
   try {
-    const orderRef = doc(collection(ctx.db, "orders"));
-    const trackingId = await trackingKey(code, payload.customer_phone);
-    const created_at = new Date().toISOString();
-    const batch = writeBatch(ctx.db);
-    batch.set(orderRef, {
-      ...payload, code, tracking_id: trackingId, status: "new", created_at, history: [{status:"new",at:created_at}],
-      created_server: serverTimestamp(),
-    });
-    // This separate record deliberately contains no name, address, phone or medicines.
-    batch.set(doc(ctx.db, "tracking", trackingId), {
-      order_id: orderRef.id, status: "new", total: payload.total, created_at, history: [{status:"new",at:created_at}],
-    });
-    await batch.commit();
-    return { ok: true, orderCode: code };
-  } catch (error) {
-    return { ok: false, reason: "error", message: error instanceof Error ? error.message : "unknown" };
-  }
+    const fingerprint = JSON.stringify(payload);
+    let pending: {fingerprint:string;request_id:string} | null = null;
+    try { pending=JSON.parse(sessionStorage.getItem("pending-order")||"null"); } catch {}
+    if (!pending || pending.fingerprint!==fingerprint) pending={fingerprint,request_id:crypto.randomUUID()};
+    sessionStorage.setItem("pending-order",JSON.stringify(pending));
+    const response=await fetch("https://oneforallgood-assistant.oneforallgood-store.workers.dev/orders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...payload,request_id:pending.request_id})});
+    const result=await response.json();
+    if (!response.ok) throw new Error(result.error==="price_changed"?"سعر منتج اتغير. حدث المتجر وراجع إجمالي السلة قبل التأكيد.":response.status===429?"استنى دقيقة قبل إرسال طلب جديد.":"تعذر إرسال الطلب. راجع البيانات وجرب تاني، أو كلم الصيدلية.");
+    sessionStorage.removeItem("pending-order");
+    return {ok:true,orderCode:result.orderCode};
+  } catch(error) {return {ok:false,reason:"error",message:error instanceof Error?error.message:"تعذر إرسال الطلب"};}
+}
+async function requestOrderNotification(orderId:string) {
+  const ctx=ensure();const user=ctx?.auth.currentUser;if(!user)return;
+  try {await fetch("https://oneforallgood-assistant.oneforallgood-store.workers.dev/notify",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+await user.getIdToken()},body:JSON.stringify({order_id:orderId})});}catch{}
 }
 
 export function watchOrders(callback: (orders: StoreOrder[]) => void): Unsubscribe | null {
@@ -138,10 +130,11 @@ export async function setOrderStatus(orderId: string, status: StoreOrder["status
     if (!allowed[current]?.includes(status)) throw new Error("حالة الطلب اتغيرت. حدث الصفحة وجرب تاني");
     const at = new Date().toISOString();
     const update = { status, history: arrayUnion({status,at}), updated_at: at };
-    transaction.update(orderRef, update);
+    transaction.update(orderRef, {...update,notification_pending:true});
     const trackingId = order.data().tracking_id;
     if (trackingId) transaction.update(doc(ctx.db,"tracking",trackingId), update);
   });
+  void requestOrderNotification(orderId);
 }
 
 export function watchAuth(callback: (user: User | null) => void): Unsubscribe | null {
@@ -249,9 +242,10 @@ export async function setExpectedDelivery(orderId: string, expected_at: string |
   await runTransaction(ctx.db, async (t) => {
     const order = await t.get(ref); if (!order.exists()) throw new Error("الطلب مش موجود");
     if (["delivered","cancelled"].includes(order.data().status)) throw new Error("الطلب اتقفل");
-    t.update(ref,{expected_at});
+    t.update(ref,{expected_at,updated_at:new Date().toISOString(),notification_pending:true});
     if (order.data().tracking_id) t.update(doc(ctx.db,"tracking",order.data().tracking_id),{expected_at});
   });
+  void requestOrderNotification(orderId);
 }
 export type OrderFeedback = { id: string; rating: number; comment: string; created_at: string };
 export async function submitFeedback(code: string, phone: string, rating: number, comment: string) {
