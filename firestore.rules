@@ -4,6 +4,9 @@ service cloud.firestore {
     function isManager() {
       return request.auth != null && request.auth.token.email == "ahmedsheta89@gmail.com";
     }
+    // POS enrollment, operation ledger and audits are server-only, including managers.
+    match /pos_tenants/{document=**} { allow read, write: if false; }
+
     // Private customer records are never readable without manager identity.
     match /orders/{orderId} {
       // Checkout is validated by the free Worker backend using a dedicated service identity.

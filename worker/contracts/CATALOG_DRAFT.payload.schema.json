@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:one-for-all-good:pos-catalog-draft:v1",
+  "title": "Exact CATALOG_DRAFT Payload JSON string contents",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["storeId", "expectedCloudVersion", "draft"],
+  "properties": {
+    "storeId": {"type": "string", "pattern": "^[a-zA-Z0-9_-]{1,100}$"},
+    "expectedCloudVersion": {"type": "string", "minLength": 1, "maxLength": 100, "description": "Firestore document updateTime from the authenticated catalog read, passed verbatim as currentDocument.updateTime; not content_version and never a locally generated placeholder."},
+    "draft": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id","name","nameEn","category","price","unit","imageUrl","description","dosage_information","usage_instructions","warnings","content_source","content_reviewer","content_reviewed_at","content_version","content_review_status","prescription_status","advertising_status","public_visible","stock_quantity"],
+      "properties": {
+        "id": {"type":"string","pattern":"^[a-zA-Z0-9_-]{1,100}$"},
+        "name": {"type":"string","minLength":1,"maxLength":1000},
+        "nameEn": {"const":""},
+        "category": {"const":"uncategorized"},
+        "price": {"type":"number","minimum":0,"maximum":100000000,"multipleOf":0.01},
+        "unit": {"type":"string","minLength":1,"maxLength":100},
+        "imageUrl": {"type":"string","maxLength":2000,"description":"Empty or credential-free HTTPS URI; no local path, data URL or unapproved hosted upload."},
+        "description": {"type":"string","maxLength":12000},
+        "dosage_information": {"type":"string","maxLength":12000},
+        "usage_instructions": {"type":"string","maxLength":12000},
+        "warnings": {"type":"string","maxLength":12000},
+        "content_source": {"type":"string","maxLength":2000},
+        "content_reviewer": {"const":""},
+        "content_reviewed_at": {"const":""},
+        "content_version": {"const":""},
+        "content_review_status": {"const":"unreviewed"},
+        "prescription_status": {"const":"unknown"},
+        "advertising_status": {"const":"unreviewed"},
+        "public_visible": {"const":false},
+        "stock_quantity": {"type":"null"}
+      }
+    }
+  },
+  "$comment": "Require draft.id == storeId in server code. Do not infer or create a product if expectedCloudVersion is missing or the document does not exist. This exact POS adapter fills nameEn/category with placeholders, which MUST NOT overwrite the existing cloud values. stock_quantity=null is a sentinel for no stock update, not a Firestore field deletion. Server should use an explicit update mask, preserve all unrelated commercial/import/stock fields, and reset public/review gates deliberately. Do not full-document set()."
+}

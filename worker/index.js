@@ -1,3 +1,4 @@
+import {posSync} from './pos-sync.js';
 import {createOrder,notifyRequest,sweep} from './orders.js';
 const ORIGINS = new Set(['https://one-for-all-good.web.app', 'https://one-for-all-good.firebaseapp.com']);
 const CONTACT = '01018108979';
@@ -25,6 +26,8 @@ export default {
     const origin = request.headers.get('Origin') || '';
     const path = new URL(request.url).pathname;
     if (path === '/health' && request.method === 'GET') return json({ok:true, service:'store-assistant', ai:!!env.AI}, origin);
+    // Native POS has its own token/device gate, never a spoofed browser Origin.
+    if (path === '/pos/sync') return posSync(request,env);
     if (!ORIGINS.has(origin)) return json({error:'origin_not_allowed'}, origin, 403);
     if (request.method === 'OPTIONS') return json({}, origin);
     if (['/orders','/notify'].includes(path) && request.method === 'POST') {try {const result=await (path==='/orders'?createOrder:notifyRequest)(request,env,ctx);return json(result.body,origin,result.status);}catch{return json({error:'service_unavailable'},origin,503);}}
