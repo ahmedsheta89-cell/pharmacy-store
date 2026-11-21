@@ -1,23 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { CATEGORIES, PRODUCTS, formatPrice } from "../lib/catalog";
 import {
-  isFirebaseConfigured, managerSendPasswordReset, managerSignIn, managerSignOut, setOrderStatus,
+  isFirebaseConfigured, managerSendPasswordReset, managerSignIn, managerSignOut,
   deleteProductById, seedProducts, upsertProduct, watchAuth, watchOrders, watchProducts,
-  type StoreOrder, type StoreProduct,
+  watchFeedback, type OrderFeedback, type StoreOrder, type StoreProduct,
 } from "../lib/firebase";
 import { STORE } from "../lib/site";
 import BannersPanel from "./BannersPanel";
 
-const STATUS_LABEL: Record<StoreOrder["status"], string> = {
-  new: "جديد",
-  confirmed: "تم التأكيد",
-  delivered: "تم التوصيل",
-  cancelled: "ملغي",
-};
+import OrderDeliveryPanel, { STATUS_LABEL } from "./OrderDeliveryPanel";
 
 const STATUS_STYLE: Record<StoreOrder["status"], string> = {
   new: "bg-gold-300/50 text-amber-800",
   confirmed: "bg-brand-100 text-brand-800",
+  preparing: "bg-blue-50 text-blue-800",
+  out_for_delivery: "bg-violet-50 text-violet-800",
   delivered: "bg-brand-700 text-white",
   cancelled: "bg-red-50 text-red-700",
 };
@@ -76,17 +73,7 @@ function OrdersPanel({ orders }: { orders: StoreOrder[] | null }) {
               </p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2 border-t border-brand-50 pt-3">
-            {order.status === "new" && (
-              <button onClick={() => void setOrderStatus(order.id, "confirmed")} className="rounded-xl bg-brand-700 px-4 py-2 text-xs font-bold text-white hover:bg-brand-800">تأكيد الطلب</button>
-            )}
-            {order.status === "confirmed" && (
-              <button onClick={() => void setOrderStatus(order.id, "delivered")} className="rounded-xl bg-brand-700 px-4 py-2 text-xs font-bold text-white hover:bg-brand-800">تم التوصيل</button>
-            )}
-            {(order.status === "new" || order.status === "confirmed") && (
-              <button onClick={() => void setOrderStatus(order.id, "cancelled")} className="rounded-xl border border-red-200 px-4 py-2 text-xs font-bold text-red-600 hover:bg-red-50">إلغاء</button>
-            )}
-          </div>
+          <OrderDeliveryPanel order={order} />
         </article>
       ))}
     </div>
@@ -268,7 +255,7 @@ export default function Admin() {
   const audio = useRef<AudioContext | null>(null);
   const knownOrders = useRef<Set<string> | null>(null);
   const [orders, setOrders] = useState<StoreOrder[] | null>(null);
-  const [tab, setTab] = useState<"orders" | "products" | "banners">("orders");
+  const [tab, setTab] = useState<"orders" | "products" | "banners" | "feedback">("orders");
 
   useEffect(() => {
     const unsub = watchAuth((u) => { setSignedIn(Boolean(u)); setAuthChecked(true); });
@@ -300,6 +287,9 @@ export default function Admin() {
     if (!audio.current) audio.current = new AudioContext();
     await audio.current.resume(); setSoundEnabled(true);
   }
+  const [feedback,setFeedback] = useState<OrderFeedback[]>([]);
+  useEffect(()=> { if (!signedIn) return; const unsub=watchFeedback(setFeedback); return ()=>unsub?.(); },[signedIn]);
+
   const signIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError("");
@@ -388,8 +378,9 @@ export default function Admin() {
               <button onClick={() => setTab("orders")} className={`rounded-xl px-5 py-2.5 text-sm font-bold transition ${tab === "orders" ? "bg-brand-700 text-white" : "border border-brand-100 bg-white text-slate-600 hover:bg-brand-50"}`}>الطلبات{newCount > 0 && <span className="mr-2 rounded-full bg-gold-300 px-2 py-0.5 text-brand-950">{newCount}</span>}</button>
               <button onClick={() => setTab("products")} className={`rounded-xl px-5 py-2.5 text-sm font-bold transition ${tab === "products" ? "bg-brand-700 text-white" : "border border-brand-100 bg-white text-slate-600 hover:bg-brand-50"}`}>المنتجات</button>
               <button onClick={() => setTab("banners")} className={`rounded-xl px-5 py-2.5 text-sm font-bold transition ${tab === "banners" ? "bg-brand-700 text-white" : "border border-brand-100 bg-white text-slate-600 hover:bg-brand-50"}`}>الإعلانات والعروض</button>
+              <button onClick={()=>setTab("feedback")} className={`rounded-xl px-5 py-2.5 text-sm font-bold ${tab==="feedback"?"bg-brand-700 text-white":"border border-brand-100 bg-white text-slate-600"}`}>تقييمات العملاء</button>
             </div>
-            {tab === "orders" ? <OrdersPanel orders={orders} /> : tab === "products" ? <ProductsPanel /> : <BannersPanel />}
+            {tab === "orders" ? <OrdersPanel orders={orders} /> : tab === "products" ? <ProductsPanel /> : tab==="banners" ? <BannersPanel /> : <section className="space-y-3"><h2 className="font-black">تقييمات العملاء بعد التسليم</h2><p className="text-xs text-slate-500">التقييمات خاصة بالإدارة، مش منشورة في المتجر.</p>{!feedback.length && <p className="rounded-xl bg-white p-8 text-center text-sm text-slate-500">مفيش تقييمات لسه.</p>}{feedback.map((f)=><article key={f.id} className="rounded-xl border border-brand-100 bg-white p-5"><p className="font-bold">{f.rating} / 5</p><p className="mt-2 whitespace-pre-wrap text-sm leading-7">{f.comment || "بدون تعليق"}</p><time className="mt-2 block text-xs text-slate-400">{new Date(f.created_at).toLocaleString("ar-EG")}</time></article>)}</section>}
           </>
         )}
       </main>

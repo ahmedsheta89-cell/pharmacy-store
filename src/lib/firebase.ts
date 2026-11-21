@@ -1,6 +1,6 @@
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import {
-  getFirestore, collection, getDoc, getDocFromServer, setDoc, deleteDoc, writeBatch, serverTimestamp, query, orderBy,
+  getFirestore, arrayUnion, runTransaction, collection, getDoc, getDocFromServer, setDoc, deleteDoc, writeBatch, serverTimestamp, query, orderBy,
   onSnapshot, doc, type Firestore, type Unsubscribe,
 } from "firebase/firestore";
 import {
@@ -53,7 +53,9 @@ export type OrderPayload = {
 export type StoreOrder = OrderPayload & {
   id: string;
   code: string;
-  status: "new" | "confirmed" | "delivered" | "cancelled";
+  status: "new" | "confirmed" | "preparing" | "out_for_delivery" | "delivered" | "cancelled";
+  expected_at?: string | null;
+  history?: StatusEvent[];
   created_at: string;
 };
 
@@ -76,7 +78,8 @@ function orderCode(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(12)), (n) => alphabet[n & 31]).join("");
 }
 
-export type OrderTracking = { status: StoreOrder["status"]; total: number; created_at: string };
+export type StatusEvent = { status: StoreOrder["status"]; at: string };
+export type OrderTracking = { status: StoreOrder["status"]; total: number; created_at: string; expected_at?: string | null; history?: StatusEvent[] };
 
 export async function lookupOrder(code: string, phone: string): Promise<OrderTracking | null> {
   const ctx = ensure();
@@ -84,7 +87,7 @@ export async function lookupOrder(code: string, phone: string): Promise<OrderTra
   const snap = await getDocFromServer(doc(ctx.db, "tracking", await trackingKey(code, phone)));
   if (!snap.exists()) return null;
   const data = snap.data();
-  return { status: data.status, total: data.total, created_at: data.created_at };
+  return { status: data.status, total: data.total, created_at: data.created_at, expected_at: data.expected_at, history: data.history };
 }
 
 export async function placeOrder(payload: OrderPayload): Promise<PlaceOrderResult> {
@@ -97,12 +100,12 @@ export async function placeOrder(payload: OrderPayload): Promise<PlaceOrderResul
     const created_at = new Date().toISOString();
     const batch = writeBatch(ctx.db);
     batch.set(orderRef, {
-      ...payload, code, tracking_id: trackingId, status: "new", created_at,
+      ...payload, code, tracking_id: trackingId, status: "new", created_at, history: [{status:"new",at:created_at}],
       created_server: serverTimestamp(),
     });
     // This separate record deliberately contains no name, address, phone or medicines.
     batch.set(doc(ctx.db, "tracking", trackingId), {
-      order_id: orderRef.id, status: "new", total: payload.total, created_at,
+      order_id: orderRef.id, status: "new", total: payload.total, created_at, history: [{status:"new",at:created_at}],
     });
     await batch.commit();
     return { ok: true, orderCode: code };
@@ -124,12 +127,21 @@ export async function setOrderStatus(orderId: string, status: StoreOrder["status
   const ctx = ensure();
   if (!ctx) throw new Error("Firebase غير مهيأ");
   const orderRef = doc(ctx.db, "orders", orderId);
-  const order = await getDoc(orderRef);
-  const batch = writeBatch(ctx.db);
-  batch.update(orderRef, { status });
-  const trackingId = order.data()?.tracking_id;
-  if (trackingId) batch.update(doc(ctx.db, "tracking", trackingId), { status });
-  await batch.commit();
+  await runTransaction(ctx.db, async (transaction) => {
+    const order = await transaction.get(orderRef);
+    if (!order.exists()) throw new Error("الطلب مش موجود");
+    const current = order.data().status as StoreOrder["status"];
+    const allowed: Record<StoreOrder["status"], StoreOrder["status"][]> = {
+      new:["confirmed","cancelled"],confirmed:["preparing","out_for_delivery","delivered","cancelled"],
+      preparing:["out_for_delivery","cancelled"],out_for_delivery:["delivered","cancelled"],delivered:[],cancelled:[]
+    };
+    if (!allowed[current]?.includes(status)) throw new Error("حالة الطلب اتغيرت. حدث الصفحة وجرب تاني");
+    const at = new Date().toISOString();
+    const update = { status, history: arrayUnion({status,at}), updated_at: at };
+    transaction.update(orderRef, update);
+    const trackingId = order.data().tracking_id;
+    if (trackingId) transaction.update(doc(ctx.db,"tracking",trackingId), update);
+  });
 }
 
 export function watchAuth(callback: (user: User | null) => void): Unsubscribe | null {
@@ -227,4 +239,27 @@ export async function deleteBanner(id: string): Promise<void> {
   const ctx = ensure();
   if (!ctx) throw new Error("Firebase غير مهيأ");
   await deleteDoc(doc(ctx.db, "banners", id));
+}
+
+
+export async function setExpectedDelivery(orderId: string, expected_at: string | null) {
+  const ctx = ensure(); if (!ctx) throw new Error("Firebase غير مهيأ");
+  if (expected_at && !Number.isFinite(Date.parse(expected_at))) throw new Error("ميعاد غير صحيح");
+  const ref = doc(ctx.db,"orders",orderId);
+  await runTransaction(ctx.db, async (t) => {
+    const order = await t.get(ref); if (!order.exists()) throw new Error("الطلب مش موجود");
+    if (["delivered","cancelled"].includes(order.data().status)) throw new Error("الطلب اتقفل");
+    t.update(ref,{expected_at});
+    if (order.data().tracking_id) t.update(doc(ctx.db,"tracking",order.data().tracking_id),{expected_at});
+  });
+}
+export type OrderFeedback = { id: string; rating: number; comment: string; created_at: string };
+export async function submitFeedback(code: string, phone: string, rating: number, comment: string) {
+  const ctx = ensure(); if (!ctx) throw new Error("Firebase غير مهيأ");
+  const key = await trackingKey(code,phone);
+  await setDoc(doc(ctx.db,"feedback",key),{rating,comment:comment.trim().slice(0,1000),created_at:new Date().toISOString()});
+}
+export function watchFeedback(callback: (feedback: OrderFeedback[]) => void) {
+  const ctx = ensure(); if (!ctx) return null;
+  return onSnapshot(query(collection(ctx.db,"feedback"),orderBy("created_at","desc")),(snap)=>callback(snap.docs.map((d)=>({id:d.id,...d.data()} as OrderFeedback))));
 }

@@ -1,13 +1,17 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { lookupOrder, type OrderTracking } from "../lib/firebase";
 import { formatPrice } from "../lib/catalog";
 import { STORE } from "../lib/site";
 
-const labels = { new: "استلمنا طلبك", confirmed: "تم تأكيد الطلب", delivered: "تم التوصيل", cancelled: "الطلب ملغي" };
-const notes = { new: "الصيدلية هتتواصل معاك لتأكيد التفاصيل.", confirmed: "طلبك اتأكد. للتفاصيل الخاصة بالتوصيل تواصل مع الصيدلية.", delivered: "شكرًا لثقتك فينا. نتمنى لك الصحة والعافية.", cancelled: "لو محتاج مساعدة أو عايز تطلب من جديد تواصل مع الصيدلية." };
+import OrderReview from "./OrderReview";
+
+const labels = { preparing:"جاري تجهيز طلبك", out_for_delivery:"طلبك خرج للتوصيل", new: "استلمنا طلبك", confirmed: "تم تأكيد الطلب", delivered: "تم التوصيل", cancelled: "الطلب ملغي" };
+const notes = { preparing:"الصيدلية بتجهز طلبك للمندوب.", out_for_delivery:"المندوب في الطريق. تابع تليفونك لسهولة التواصل.", new: "الصيدلية هتتواصل معاك لتأكيد التفاصيل.", confirmed: "طلبك اتأكد. للتفاصيل الخاصة بالتوصيل تواصل مع الصيدلية.", delivered: "شكرًا لثقتك فينا. نتمنى لك الصحة والعافية.", cancelled: "لو محتاج مساعدة أو عايز تطلب من جديد تواصل مع الصيدلية." };
 const input = "mt-2 w-full rounded-xl border border-brand-100 bg-white px-4 py-3 text-left outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100";
 
 export default function Tracking() {
+  const [now,setNow] = useState(Date.now());
+  useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),60000);return ()=>clearInterval(timer);},[]);
   const [code, setCode] = useState("");
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
@@ -43,12 +47,16 @@ export default function Tracking() {
           <span className="text-xs font-bold text-brand-600">الحالة الحالية</span>
           <h2 className="mt-2 text-2xl font-black">{labels[result.status]}</h2>
           <p className="mt-2 text-sm leading-7">{notes[result.status]}</p>
+          {result.expected_at && <p className="mt-4 rounded-xl bg-white p-3 text-sm leading-7"><span className="block text-xs text-slate-500">ميعاد التوصيل المتوقع (توقيت القاهرة)</span><time className="font-bold">{new Date(result.expected_at).toLocaleString("ar-EG",{dateStyle:"medium",timeStyle:"short",timeZone:"Africa/Cairo"})}</time></p>}
+          {result.expected_at && Date.parse(result.expected_at)<now && !["delivered","cancelled"].includes(result.status) && <p role="alert" className="mt-3 rounded-xl bg-amber-50 p-3 text-sm leading-7 text-amber-900">الميعاد المتوقع عدى ولسه الطلب مش متسجل تم تسليمه. كلم الصيدلية لمعرفة آخر تحديث. الميعاد تقديري مش ضمان.</p>}
+          {!!result.history?.length && <ol aria-label="مراحل الطلب" className="mt-4 space-y-3 border-r-2 border-brand-200 pr-4">{result.history.map((h,i)=><li key={i} className="text-sm"><p className="font-bold">{labels[h.status]}</p><time className="text-xs text-slate-500">{new Date(h.at).toLocaleString("ar-EG",{dateStyle:"short",timeStyle:"short",timeZone:"Africa/Cairo"})}</time></li>)}</ol>}
           <dl className="mt-4 space-y-2 border-t border-brand-100 pt-4 text-sm">
             <div className="flex justify-between"><dt>الإجمالي</dt><dd className="font-bold">{formatPrice(result.total)}</dd></div>
             <div className="flex justify-between"><dt>تاريخ الطلب</dt><dd>{new Date(result.created_at).toLocaleDateString("ar-EG")}</dd></div>
           </dl>
           <button onClick={() => void submit({ preventDefault() {} } as React.FormEvent)} disabled={busy} className="mt-4 text-sm font-bold text-brand-700 underline">تحديث الحالة</button>
         </section>}
+        {result?.status === "delivered" && <OrderReview key={code+phone} code={code} phone={phone} />}
         <p className="mt-6 text-center text-sm text-slate-500">محتاج مساعدة؟ كلمنا: <a dir="ltr" className="font-bold text-brand-700" href={`tel:${STORE.whatsappNumber}`}>{STORE.whatsappDisplay}</a></p>
       </section>
     </div>

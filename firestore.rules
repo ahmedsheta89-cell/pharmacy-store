@@ -37,11 +37,12 @@ service cloud.firestore {
       allow get: if true;
       allow list: if isManager();
       allow create: if
-        request.resource.data.keys().hasOnly(['order_id', 'status', 'total', 'created_at'])
+        request.resource.data.keys().hasOnly(['order_id', 'status', 'total', 'created_at', 'history'])
         && request.resource.data.order_id is string
         && request.resource.data.status == 'new'
         && request.resource.data.total is number
         && request.resource.data.created_at is string
+        && (!('history' in request.resource.data) || (request.resource.data.history is list && request.resource.data.history.size() == 1 && request.resource.data.history[0].status == 'new'))
         && trackingId.size() == 64
         && getAfter(/databases/$(database)/documents/orders/$(request.resource.data.order_id)).data.tracking_id == trackingId
         && getAfter(/databases/$(database)/documents/orders/$(request.resource.data.order_id)).data.total == request.resource.data.total;
@@ -50,6 +51,15 @@ service cloud.firestore {
     match /banners/{bannerId} {
       allow read: if true;
       allow write: if isManager();
+    }
+    match /feedback/{trackingId} {
+      allow read, update, delete: if isManager();
+      allow create: if request.resource.data.keys().hasOnly(['rating','comment','created_at'])
+        && request.resource.data.rating is int
+        && request.resource.data.rating >= 1 && request.resource.data.rating <= 5
+        && request.resource.data.comment is string && request.resource.data.comment.size() <= 1000
+        && request.resource.data.created_at is string
+        && get(/databases/$(database)/documents/tracking/$(trackingId)).data.status == 'delivered';
     }
   }
 }
