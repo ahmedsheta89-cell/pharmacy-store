@@ -87,7 +87,9 @@ export default function CartDrawer() {
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" className="size-14 text-brand-200"><circle cx="9" cy="20" r="1.4" /><circle cx="17" cy="20" r="1.4" /><path d="M3 3h2l2.6 12.4a1 1 0 0 0 1 .8h8.8a1 1 0 0 0 1-.76L20.5 7H6" strokeLinecap="round" strokeLinejoin="round" /></svg>
                   <p className="font-bold text-brand-950">سلتك فارغة</p>
                   <p className="text-sm text-slate-500">أضف منتجات من الكتالوج وستظهر هنا.</p>
-                  <button onClick={close} className="mt-2 rounded-xl bg-brand-700 px-5 py-2.5 text-sm font-bold text-white hover:bg-brand-800">ابدأ التسوق</button>
+                  <p className="rounded-xl bg-gold-300/30 p-3 text-sm font-bold text-brand-950">احتفظ بكود الطلب أو صوّر الشاشة. تحتاج الكود ورقم موبايلك لمتابعة الحالة.</p>
+            <a href="/track" className="rounded-xl bg-brand-700 px-6 py-3 text-sm font-bold text-white">تتبع طلبي</a>
+            <button onClick={close} className="mt-2 rounded-xl bg-brand-700 px-5 py-2.5 text-sm font-bold text-white hover:bg-brand-800">ابدأ التسوق</button>
                 </div>
               ) : (
                 <ul className="space-y-3">
@@ -177,6 +179,8 @@ export default function CartDrawer() {
             <h3 className="text-xl font-black text-brand-950">شكرًا لك! استلمنا طلبك</h3>
             <p className="text-sm text-slate-600">رقم الطلب: <span dir="ltr" className="font-black text-brand-700">{orderCode}</span></p>
             <p className="text-sm leading-6 text-slate-600">سنتواصل معك على رقمك لتأكيد الطلب، والتوصيل مجاني. الدفع نقدًا عند الاستلام.</p>
+            <p className="rounded-xl bg-gold-300/30 p-3 text-sm font-bold text-brand-950">احتفظ بكود الطلب أو صوّر الشاشة. تحتاج الكود ورقم موبايلك لمتابعة الحالة.</p>
+            <a href="/track" className="rounded-xl bg-brand-700 px-6 py-3 text-sm font-bold text-white">تتبع طلبي</a>
             <button onClick={close} className="mt-2 rounded-xl bg-brand-700 px-6 py-3 text-sm font-bold text-white hover:bg-brand-800">متابعة التسوق</button>
           </div>
         )}

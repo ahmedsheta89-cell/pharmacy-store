@@ -137,6 +137,8 @@ export default function Storefront() {
         </div>
       </header>
 
+      <nav className="bg-brand-50 px-4 py-2 text-center"><a href="/track" className="text-sm font-bold text-brand-800 hover:underline">عندك طلب؟ تابع حالته بكود الطلب ورقم الموبايل ←</a></nav>
+
       {/* Hero */}
       <section className="relative overflow-hidden bg-brand-900 text-white">
         <div className="absolute -left-24 -top-24 size-80 rounded-full bg-brand-700/40 blur-3xl" />

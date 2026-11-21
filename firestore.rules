@@ -21,7 +21,7 @@ service cloud.firestore {
         && request.resource.data.items.size() <= 50
         && request.resource.data.status == 'new'
         && request.resource.data.code is string
-        && request.resource.data.code.size() <= 10;
+        && request.resource.data.code.size() <= 20;
       allow read, update, delete: if isManager();
     }
 
@@ -31,5 +31,21 @@ service cloud.firestore {
       allow write: if isManager();
     }
 
+    // Only a minimal status record is public. Its SHA-256 document key requires
+    // the order code and normalized phone. Collection listing is never public.
+    match /tracking/{trackingId} {
+      allow get: if true;
+      allow list: if isManager();
+      allow create: if
+        request.resource.data.keys().hasOnly(['order_id', 'status', 'total', 'created_at'])
+        && request.resource.data.order_id is string
+        && request.resource.data.status == 'new'
+        && request.resource.data.total is number
+        && request.resource.data.created_at is string
+        && trackingId.size() == 64
+        && getAfter(/databases/$(database)/documents/orders/$(request.resource.data.order_id)).data.tracking_id == trackingId
+        && getAfter(/databases/$(database)/documents/orders/$(request.resource.data.order_id)).data.total == request.resource.data.total;
+      allow update, delete: if isManager();
+    }
   }
 }
