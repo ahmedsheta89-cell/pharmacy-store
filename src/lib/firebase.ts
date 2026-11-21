@@ -4,7 +4,7 @@ import {
   onSnapshot, updateDoc, doc, type Firestore, type Unsubscribe,
 } from "firebase/firestore";
 import {
-  getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged,
+  getAuth, signInWithEmailAndPassword, sendPasswordResetEmail, signOut, onAuthStateChanged,
   type Auth, type User,
 } from "firebase/auth";
 
@@ -115,4 +115,10 @@ export async function managerSignIn(email: string, password: string): Promise<vo
 export async function managerSignOut(): Promise<void> {
   const ctx = ensure();
   if (ctx) await signOut(ctx.auth);
+}
+
+export async function managerSendPasswordReset(email: string): Promise<void> {
+  const ctx = ensure();
+  if (!ctx) throw new Error("Firebase غير مهيأ بعد - أكمل إعداد المشروع أولًا.");
+  await sendPasswordResetEmail(ctx.auth, email);
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { formatPrice } from "../lib/catalog";
 import {
-  isFirebaseConfigured, managerSignIn, managerSignOut, setOrderStatus,
+  isFirebaseConfigured, managerSendPasswordReset, managerSignIn, managerSignOut, setOrderStatus,
   watchAuth, watchOrders, type StoreOrder,
 } from "../lib/firebase";
 import { STORE } from "../lib/site";
@@ -27,6 +27,7 @@ export default function Admin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
+  const [resetMessage, setResetMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [orders, setOrders] = useState<StoreOrder[] | null>(null);
 
@@ -49,6 +50,24 @@ export default function Admin() {
       await managerSignIn(email.trim(), password);
     } catch {
       setAuthError("بيانات الدخول غير صحيحة. تأكد من البريد وكلمة المرور.");
+    }
+    setBusy(false);
+  };
+
+  const resetPassword = async () => {
+    const target = email.trim();
+    setAuthError("");
+    setResetMessage("");
+    if (!target) {
+      setAuthError("اكتب بريدك الإلكتروني أولًا ثم اضغط نسيت كلمة السر.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await managerSendPasswordReset(target);
+      setResetMessage("أرسلنا لينك إعادة تعيين كلمة السر إلى بريدك. افتح الرابط واختر كلمة جديدة، ثم عد للدخول.");
+    } catch {
+      setAuthError("تعذّر إرسال لينك إعادة التعيين. تأكد من البريد وحاول مرة أخرى.");
     }
     setBusy(false);
   };
@@ -93,8 +112,12 @@ export default function Admin() {
               <input type="password" required dir="ltr" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-xl border border-brand-100 px-3 py-2.5 text-left text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100" placeholder="••••••••" />
             </label>
             {authError && <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{authError}</p>}
+            {resetMessage && <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">{resetMessage}</p>}
             <button type="submit" disabled={busy} className="mt-5 w-full rounded-xl bg-brand-700 py-3 text-sm font-bold text-white hover:bg-brand-800 disabled:opacity-60">
               {busy ? "جارٍ الدخول..." : "دخول"}
+            </button>
+            <button type="button" onClick={() => void resetPassword()} disabled={busy} className="mt-2 w-full rounded-xl border border-brand-100 py-2.5 text-sm font-bold text-brand-700 hover:bg-brand-50 disabled:opacity-60">
+              نسيت كلمة السر؟
             </button>
           </form>
         ) : orders === null ? (
