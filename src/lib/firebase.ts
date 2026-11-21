@@ -185,6 +185,7 @@ export type StoreProduct = {
   advertising_status?: "unreviewed" | "approved" | "blocked";
   public_visible?: boolean;
   stock_quantity?: number;
+  import_source?: string;
 };
 
 export function watchProducts(callback: (products: StoreProduct[]) => void, manager = false): Unsubscribe | null {
@@ -278,4 +279,11 @@ export async function submitFeedback(code: string, phone: string, rating: number
 export function watchFeedback(callback: (feedback: OrderFeedback[]) => void) {
   const ctx = ensure(); if (!ctx) return null;
   return onSnapshot(query(collection(ctx.db,"feedback"),orderBy("created_at","desc")),(snap)=>callback(snap.docs.map((d)=>({id:d.id,...d.data()} as OrderFeedback))));
+}
+
+// Each chunk is atomic. A failure reports exactly how many earlier rows committed.
+export async function bulkImportProducts(products:StoreProduct[],onProgress:(saved:number)=>void){
+ const ctx=ensure();if(!ctx)throw new Error("Firebase غير مهيأ");if(products.length>1000)throw new Error("قسم الملف لأجزاء حتى 1000 منتج");let saved=0;
+ try {for(let i=0;i<products.length;i+=200){const batch=writeBatch(ctx.db);for(const p of products.slice(i,i+200)){const {id,...data}=p;batch.set(doc(ctx.db,"products",id),Object.fromEntries(Object.entries({...data,content_review_status:"unreviewed",advertising_status:"unreviewed",prescription_status:"unknown",public_visible:false}).filter(([,v])=>v!==undefined)));}await batch.commit();saved+=Math.min(200,products.length-i);onProgress(saved);}}
+ catch {throw new Error(`توقف الاستيراد بعد حفظ ${saved} من ${products.length}. الصفوف المحفوظة مسودات خاصة. راجعها قبل إعادة المحاولة، واستخدم نفس المعرفات لمنع التكرار.`);}
 }
