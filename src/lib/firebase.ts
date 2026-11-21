@@ -1,7 +1,7 @@
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import {
-  getFirestore, collection, addDoc, setDoc, deleteDoc, writeBatch, serverTimestamp, query, orderBy,
-  onSnapshot, updateDoc, doc, type Firestore, type Unsubscribe,
+  getFirestore, collection, getDoc, setDoc, deleteDoc, writeBatch, serverTimestamp, query, orderBy,
+  onSnapshot, doc, type Firestore, type Unsubscribe,
 } from "firebase/firestore";
 import {
   getAuth, signInWithEmailAndPassword, sendPasswordResetEmail, signOut, onAuthStateChanged,
@@ -61,10 +61,30 @@ export type PlaceOrderResult =
   | { ok: true; orderCode: string }
   | { ok: false; reason: "not_configured" | "error"; message?: string };
 
+export function normalizePhone(value: string): string {
+  return value.replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/[^0-9]/g, "").replace(/^(0020|20)/, "").replace(/^0/, "");
+}
+
+export async function trackingKey(code: string, phone: string): Promise<string> {
+  const bytes = new TextEncoder().encode(`${code.trim().toUpperCase()}|${normalizePhone(phone)}`);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (n) => n.toString(16).padStart(2, "0")).join("");
+}
+
 function orderCode(): string {
-  const stamp = Date.now().toString(36).toUpperCase().slice(-4);
-  const rand = Math.floor(Math.random() * 1296).toString(36).toUpperCase().padStart(2, "0");
-  return `H${stamp}${rand}`;
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  return Array.from(crypto.getRandomValues(new Uint8Array(12)), (n) => alphabet[n & 31]).join("");
+}
+
+export type OrderTracking = { status: StoreOrder["status"]; total: number; created_at: string };
+
+export async function lookupOrder(code: string, phone: string): Promise<OrderTracking | null> {
+  const ctx = ensure();
+  if (!ctx) throw new Error("Firebase غير مهيأ");
+  const snap = await getDoc(doc(ctx.db, "tracking", await trackingKey(code, phone)));
+  if (!snap.exists()) return null;
+  const data = snap.data();
+  return { status: data.status, total: data.total, created_at: data.created_at };
 }
 
 export async function placeOrder(payload: OrderPayload): Promise<PlaceOrderResult> {
@@ -72,13 +92,19 @@ export async function placeOrder(payload: OrderPayload): Promise<PlaceOrderResul
   if (!ctx) return { ok: false, reason: "not_configured" };
   const code = orderCode();
   try {
-    await addDoc(collection(ctx.db, "orders"), {
-      ...payload,
-      code,
-      status: "new",
-      created_at: new Date().toISOString(),
+    const orderRef = doc(collection(ctx.db, "orders"));
+    const trackingId = await trackingKey(code, payload.customer_phone);
+    const created_at = new Date().toISOString();
+    const batch = writeBatch(ctx.db);
+    batch.set(orderRef, {
+      ...payload, code, tracking_id: trackingId, status: "new", created_at,
       created_server: serverTimestamp(),
     });
+    // This separate record deliberately contains no name, address, phone or medicines.
+    batch.set(doc(ctx.db, "tracking", trackingId), {
+      order_id: orderRef.id, status: "new", total: payload.total, created_at,
+    });
+    await batch.commit();
     return { ok: true, orderCode: code };
   } catch (error) {
     return { ok: false, reason: "error", message: error instanceof Error ? error.message : "unknown" };
@@ -97,7 +123,13 @@ export function watchOrders(callback: (orders: StoreOrder[]) => void): Unsubscri
 export async function setOrderStatus(orderId: string, status: StoreOrder["status"]): Promise<void> {
   const ctx = ensure();
   if (!ctx) throw new Error("Firebase غير مهيأ");
-  await updateDoc(doc(ctx.db, "orders", orderId), { status });
+  const orderRef = doc(ctx.db, "orders", orderId);
+  const order = await getDoc(orderRef);
+  const batch = writeBatch(ctx.db);
+  batch.update(orderRef, { status });
+  const trackingId = order.data()?.tracking_id;
+  if (trackingId) batch.update(doc(ctx.db, "tracking", trackingId), { status });
+  await batch.commit();
 }
 
 export function watchAuth(callback: (user: User | null) => void): Unsubscribe | null {

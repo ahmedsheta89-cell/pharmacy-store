@@ -3,6 +3,7 @@ import { Route, Router, useLocation } from "wouter";
 import { CartProvider } from "./lib/cart";
 import Storefront from "./components/Storefront";
 import Admin from "./components/Admin";
+import Tracking from "./components/Tracking";
 
 function ScrollToTop() {
   const [location] = useLocation();
@@ -15,6 +16,7 @@ export default function App() {
     <CartProvider>
       <Router>
         <ScrollToTop />
+        <Route path="/track" component={Tracking} />
         <Route path="/admin" component={Admin} />
         <Route path="/" component={Storefront} />
       </Router>
