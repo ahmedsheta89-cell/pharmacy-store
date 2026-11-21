@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CATEGORIES, PRODUCTS, formatPrice } from "../lib/catalog";
 import {
   isFirebaseConfigured, managerSendPasswordReset, managerSignIn, managerSignOut, setOrderStatus,
@@ -264,6 +264,9 @@ export default function Admin() {
   const [authError, setAuthError] = useState("");
   const [resetMessage, setResetMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(false);
+  const audio = useRef<AudioContext | null>(null);
+  const knownOrders = useRef<Set<string> | null>(null);
   const [orders, setOrders] = useState<StoreOrder[] | null>(null);
   const [tab, setTab] = useState<"orders" | "products" | "banners">("orders");
 
@@ -274,10 +277,29 @@ export default function Admin() {
 
   useEffect(() => {
     if (!signedIn) { setOrders(null); return; }
-    const unsub = watchOrders(setOrders);
+    const unsub = watchOrders((next) => {
+      const previous = knownOrders.current;
+      if (previous && next.some((o) => o.status === "new" && !previous.has(o.id)) && audio.current?.state === "running") {
+        const tone = audio.current.createOscillator(); const gain = audio.current.createGain();
+        tone.connect(gain); gain.connect(audio.current.destination); tone.frequency.value = 740;
+        gain.gain.setValueAtTime(0.08, audio.current.currentTime); gain.gain.exponentialRampToValueAtTime(0.001, audio.current.currentTime + 0.5);
+        tone.start(); tone.stop(audio.current.currentTime + 0.5);
+      }
+      knownOrders.current = new Set(next.map((o) => o.id)); setOrders(next);
+    });
     return () => unsub?.();
   }, [signedIn]);
 
+  const newCount = orders?.filter((o) => o.status === "new").length || 0;
+  useEffect(() => {
+    if (signedIn) document.title = `${newCount ? `(${newCount}) طلبات جديدة | ` : ""}إدارة One For All Good`;
+    return () => { document.title = "One For All Good"; };
+  }, [signedIn, newCount]);
+  async function toggleSound() {
+    if (soundEnabled) { await audio.current?.suspend(); setSoundEnabled(false); return; }
+    if (!audio.current) audio.current = new AudioContext();
+    await audio.current.resume(); setSoundEnabled(true);
+  }
   const signIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError("");
@@ -358,8 +380,12 @@ export default function Admin() {
           </form>
         ) : (
           <>
+            <section aria-label="متابعة الطلبات المباشرة" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand-100 bg-white p-4">
+              <div role="status" aria-live="polite"><p className="text-sm font-black"><span className="ml-2 inline-block size-2 rounded-full bg-emerald-500" />متابعة مباشرة أثناء فتح اللوحة</p><p className="mt-1 text-xs text-slate-500">{newCount ? `${newCount} طلب جديد محتاج مراجعتك` : "مفيش طلبات جديدة مستنية المراجعة"}</p></div>
+              <button onClick={() => void toggleSound()} className="rounded-xl border border-brand-100 px-4 py-2 text-xs font-bold">{soundEnabled ? "إيقاف صوت الطلبات" : "تفعيل صوت الطلبات الجديدة"}</button>
+            </section>
             <div className="mb-5 flex flex-wrap gap-2">
-              <button onClick={() => setTab("orders")} className={`rounded-xl px-5 py-2.5 text-sm font-bold transition ${tab === "orders" ? "bg-brand-700 text-white" : "border border-brand-100 bg-white text-slate-600 hover:bg-brand-50"}`}>الطلبات</button>
+              <button onClick={() => setTab("orders")} className={`rounded-xl px-5 py-2.5 text-sm font-bold transition ${tab === "orders" ? "bg-brand-700 text-white" : "border border-brand-100 bg-white text-slate-600 hover:bg-brand-50"}`}>الطلبات{newCount > 0 && <span className="mr-2 rounded-full bg-gold-300 px-2 py-0.5 text-brand-950">{newCount}</span>}</button>
               <button onClick={() => setTab("products")} className={`rounded-xl px-5 py-2.5 text-sm font-bold transition ${tab === "products" ? "bg-brand-700 text-white" : "border border-brand-100 bg-white text-slate-600 hover:bg-brand-50"}`}>المنتجات</button>
               <button onClick={() => setTab("banners")} className={`rounded-xl px-5 py-2.5 text-sm font-bold transition ${tab === "banners" ? "bg-brand-700 text-white" : "border border-brand-100 bg-white text-slate-600 hover:bg-brand-50"}`}>الإعلانات والعروض</button>
             </div>

@@ -5,6 +5,7 @@ import { STORE } from "../lib/site";
 import { useCart } from "../lib/cart";
 import ProductImage from "./ProductImage";
 import CartDrawer from "./CartDrawer";
+import StoreChat from "./StoreChat";
 import { StorePromos } from "./BannersPanel";
 
 function SearchIcon() {
@@ -167,8 +168,8 @@ export default function Storefront() {
           </div>
           <div className="mt-10 grid max-w-lg grid-cols-3 gap-4 text-center">
             {[
-              { n: "+1000", t: "منتج متوفر" },
-              { n: "٣٠ دقيقة", t: "متوسط التوصيل" },
+              { n: String(catalog.length), t: "منتج في الكتالوج" },
+              { n: "بنتابعك", t: "من الطلب للتوصيل" },
               { n: "كاش", t: "عند الاستلام" },
             ].map((s) => (
               <div key={s.t} className="rounded-2xl border border-white/10 bg-white/5 px-2 py-3">
@@ -266,9 +267,9 @@ export default function Storefront() {
           </div>
           <div>
             <h4 className="text-sm font-bold text-white">مواعيد العمل</h4>
-            <p className="mt-2 text-xs leading-6">يوميًا من ٩ صباحًا حتى ١٢ منتصف الليل</p>
+            <p className="mt-2 text-xs leading-6">تواصل مع الصيدلية لتأكيد مواعيد العمل</p>
             <h4 className="mt-4 text-sm font-bold text-white">التوصيل</h4>
-            <p className="mt-1 text-xs leading-6">داخل المدينة خلال ٣٠-٦٠ دقيقة</p>
+            <p className="mt-1 text-xs leading-6">موعد ومناطق التوصيل بيتأكدوا حسب العنوان وتوفر المنتجات</p>
           </div>
           <div>
             <h4 className="text-sm font-bold text-white">تحتاج مساعدة؟</h4>
@@ -290,6 +291,7 @@ export default function Storefront() {
         <p className="mt-8 text-center text-[11px] text-brand-400">© 2026 {STORE.name} - جميع الحقوق محفوظة</p>
       </footer>
 
+      <StoreChat />
       <CartDrawer />
     </div>
   );
