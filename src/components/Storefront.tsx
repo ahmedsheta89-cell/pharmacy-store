@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { CATEGORIES, PRODUCTS, formatPrice, type Product } from "../lib/catalog";
+import { CATEGORIES, formatPrice, type Product } from "../lib/catalog";
 import { watchProducts } from "../lib/firebase";
 import { STORE } from "../lib/site";
 import { useCart } from "../lib/cart";
@@ -37,8 +37,8 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: () => void }
             {product.badge}
           </span>
         )}
-        <h3 className="min-h-12 text-sm font-bold leading-6 text-brand-950">{product.name}</h3>
-        <p className="mt-1 line-clamp-2 min-h-8 text-xs leading-4 text-slate-500">{product.description}</p>
+        <h3 className="min-h-12 text-sm font-bold leading-6 text-brand-950"><a href={`/product/${encodeURIComponent(product.id)}`} className="hover:underline">{product.name}</a></h3>
+        <p className="mt-1 line-clamp-2 min-h-8 text-xs leading-4 text-slate-500">{product.content_review_status==="reviewed"?product.description:"بيانات المنتج تحت مراجعة الصيدلية"}</p><a href={`/product/${encodeURIComponent(product.id)}`} className="mt-2 inline-block text-xs font-bold text-brand-700 underline">تفاصيل المنتج والاستعمال والتحذيرات</a>
         <div className="mt-3 flex items-end justify-between">
           <div>
             <span className="text-lg font-black text-brand-700">{formatPrice(product.price)}</span>
@@ -49,9 +49,10 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: () => void }
           </div>
           <button
             onClick={onAdd}
+            disabled={product.stock_quantity===0}
             className="rounded-xl bg-brand-700 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-brand-600 active:scale-95"
           >
-            + أضف
+            {product.stock_quantity===0?"غير متوفر":"+ أضف"}
           </button>
         </div>
       </div>
@@ -71,7 +72,7 @@ export default function Storefront() {
     return () => unsub?.();
   }, []);
 
-  const catalog = liveProducts ?? PRODUCTS;
+  const catalog = liveProducts ?? [];
 
   const visible = useMemo(() => {
     const q = query.trim();
@@ -232,8 +233,8 @@ export default function Storefront() {
 
         {visible.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-brand-200 bg-white py-16 text-center">
-            <p className="text-lg font-bold text-brand-900">لا توجد نتائج لـ «{query}»</p>
-            <p className="mt-2 text-sm text-slate-500">جرب اسمًا آخر، أو اسألنا على واتساب - غالبًا متوفر في الصيدلية.</p>
+            <p className="text-lg font-bold text-brand-900">{query?`لا توجد نتائج لـ «${query}»`:"الكتالوج تحت مراجعة الصيدلية"}</p>
+            <p className="mt-2 text-sm text-slate-500">نعرض فقط المنتجات التي راجعتها الصيدلية واعتمدت السماح بعرضها. تواصل معنا للاستفسار عن منتج.</p>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">

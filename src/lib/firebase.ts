@@ -1,6 +1,6 @@
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import {
-  getFirestore, arrayUnion, runTransaction, collection, getDoc, getDocFromServer, setDoc, deleteDoc, writeBatch, serverTimestamp, query, orderBy,
+  getFirestore, arrayUnion, runTransaction, collection, getDoc, getDocFromServer, setDoc, deleteDoc, writeBatch, serverTimestamp, query, where, orderBy,
   onSnapshot, doc, type Firestore, type Unsubscribe,
 } from "firebase/firestore";
 import {
@@ -173,21 +173,43 @@ export type StoreProduct = {
   badge?: string;
   description: string;
   imageUrl?: string;
+  dosage_information?: string;
+  usage_instructions?: string;
+  warnings?: string;
+  content_source?: string;
+  content_reviewer?: string;
+  content_reviewed_at?: string;
+  content_version?: string;
+  content_review_status?: "unreviewed" | "reviewed";
+  prescription_status?: "unknown" | "non_prescription" | "prescription" | "not_medicine";
+  advertising_status?: "unreviewed" | "approved" | "blocked";
+  public_visible?: boolean;
+  stock_quantity?: number;
 };
 
-export function watchProducts(callback: (products: StoreProduct[]) => void): Unsubscribe | null {
+export function watchProducts(callback: (products: StoreProduct[]) => void, manager = false): Unsubscribe | null {
   const ctx = ensure();
   if (!ctx) return null;
-  const q = query(collection(ctx.db, "products"), orderBy("name"));
+  const q = manager ? query(collection(ctx.db, "products"), orderBy("name")) : query(collection(ctx.db,"products"),where("public_visible","==",true));
   return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<StoreProduct, "id">) })));
+    callback(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<StoreProduct, "id">) })).sort((a,b)=>a.name.localeCompare(b.name,"ar")));
   });
+}
+
+
+export async function getPublicProduct(id:string):Promise<StoreProduct|null>{
+ const ctx=ensure();if(!ctx||!/^[a-zA-Z0-9_-]{1,100}$/.test(id))return null;
+ const d=await getDocFromServer(doc(ctx.db,"products",id));if(!d.exists()||d.data().public_visible!==true)return null;return {id:d.id,...d.data()} as StoreProduct;
 }
 
 export async function upsertProduct(product: StoreProduct): Promise<void> {
   const ctx = ensure();
   if (!ctx) throw new Error("Firebase غير مهيأ");
-  const { id, ...data } = product;
+  if (!product.name.trim() || !Number.isFinite(product.price) || product.price<0) throw new Error("بيانات المنتج غير صحيحة");
+  if (product.stock_quantity!==undefined && (!Number.isInteger(product.stock_quantity)||product.stock_quantity<0)) throw new Error("كمية المخزون لازم تكون عددًا صحيحًا غير سالب");
+  const reviewed=product.content_review_status==="reviewed";
+  if(reviewed && (!product.content_source?.trim()||!product.content_reviewer?.trim()||!product.content_reviewed_at||!product.content_version?.trim())) throw new Error("أكمل المصدر والمراجع والتاريخ والنسخة قبل الاعتماد");
+  const { id, ...data } = {...product,public_visible:reviewed && product.advertising_status==="approved" && ["non_prescription","not_medicine"].includes(product.prescription_status||"")};
   await setDoc(doc(ctx.db, "products", id), Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined)));
 }
 
@@ -203,7 +225,7 @@ export async function seedProducts(products: StoreProduct[]): Promise<void> {
   const batch = writeBatch(ctx.db);
   for (const product of products) {
     const { id, ...data } = product;
-    batch.set(doc(ctx.db, "products", id), data);
+    batch.set(doc(ctx.db, "products", id), {...data,description:"",content_review_status:"unreviewed",prescription_status:"unknown",advertising_status:"unreviewed",public_visible:false});
   }
   await batch.commit();
 }

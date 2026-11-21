@@ -53,7 +53,7 @@ export async function createOrder(request,env,ctx){
  // One batch request keeps large carts below the free Worker's subrequest cap.
  const productRows=await db(env,':batchGet','POST',{documents:b.items.map(item=>NAME+'/products/'+item.product_id)});
  const catalog=new Map(productRows.filter(row=>row.found).map(row=>[row.found.name.split('/').pop(),object(row.found.fields)]));
- for(const item of b.items){const product=catalog.get(item.product_id),price=product?.price;if(!product||typeof price!=='number'||!Number.isFinite(price)||price<0)return {status:400,body:{error:'product_unavailable'}};items.push({product_id:item.product_id,product_name:product.name,unit_price:price,quantity:item.quantity});total+=Math.round(price*100)*item.quantity;}
+ for(const item of b.items){const product=catalog.get(item.product_id),price=product?.price;if(!product||product.public_visible!==true||product.advertising_status!=='approved'||product.content_review_status!=='reviewed'||!['non_prescription','not_medicine'].includes(product.prescription_status)||typeof price!=='number'||!Number.isFinite(price)||price<0||(product.stock_quantity!==undefined&&item.quantity>product.stock_quantity))return {status:400,body:{error:'product_unavailable'}};items.push({product_id:item.product_id,product_name:product.name,unit_price:price,quantity:item.quantity});total+=Math.round(price*100)*item.quantity;}
  total/=100;if(total<=0||total>1000000)return {status:400,body:{error:'invalid_total'}};
  // Price changes require the customer to review the new total before submitting again.
  if(typeof b.total!=='number'||Math.round(b.total*100)!==Math.round(total*100))return {status:409,body:{error:'price_changed',total}};
