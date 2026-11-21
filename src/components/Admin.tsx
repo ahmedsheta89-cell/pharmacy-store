@@ -6,6 +6,7 @@ import {
   watchFeedback, type OrderFeedback, type StoreOrder, type StoreProduct,
 } from "../lib/firebase";
 import { STORE } from "../lib/site";
+import ProductReviewFields from "./ProductReviewFields";
 import BannersPanel from "./BannersPanel";
 
 import OrderDeliveryPanel, { STATUS_LABEL } from "./OrderDeliveryPanel";
@@ -88,7 +89,7 @@ function ProductsPanel() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const unsub = watchProducts(setProducts);
+    const unsub = watchProducts(setProducts,true);
     return () => unsub?.();
   }, []);
 
@@ -121,8 +122,8 @@ function ProductsPanel() {
     try {
       await upsertProduct(product);
       setEditing(null);
-    } catch {
-      setError("تعذّر حفظ المنتج. حاول مرة أخرى.");
+    } catch (e) {
+      setError(e instanceof Error?e.message:"تعذّر حفظ المنتج. حاول مرة أخرى.");
     }
     setBusy(false);
   };
@@ -193,13 +194,14 @@ function ProductsPanel() {
         </label>
         <label className="mt-3 block">
           <span className="mb-1.5 block text-sm font-bold">الوصف</span>
-          <textarea required rows={2} value={editing.description} onChange={(e) => setEditing({ ...editing, description: e.target.value })} className="w-full rounded-xl border border-brand-100 px-3 py-2.5 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100" placeholder="وصف مختصر يظهر للعميل" />
+          <textarea required rows={2} value={editing.description} onChange={(e) => setEditing({ ...editing, description: e.target.value,content_review_status:"unreviewed" })} className="w-full rounded-xl border border-brand-100 px-3 py-2.5 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100" placeholder="وصف مختصر يظهر للعميل" />
         </label>
         <label className="mt-3 block">
           <span className="mb-1.5 block text-sm font-bold">رابط صورة المنتج (اختياري)</span>
           <input dir="ltr" type="url" value={editing.imageUrl ?? ""} onChange={(e) => setEditing({ ...editing, imageUrl: e.target.value })} className="w-full rounded-xl border border-brand-100 px-3 py-2.5 text-left text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100" placeholder="https://…" />
           <span className="mt-1 block text-xs text-slate-400">لو سيبته فاضي هتظهر أيقونة القسم تلقائيًا.</span>
         </label>
+        <ProductReviewFields product={editing} onChange={setEditing}/>
         {error && <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{error}</p>}
         <div className="mt-5 flex gap-2">
           <button type="submit" disabled={busy} className="flex-1 rounded-xl bg-brand-700 py-3 text-sm font-bold text-white hover:bg-brand-800 disabled:opacity-60">{busy ? "جارٍ الحفظ..." : "حفظ المنتج"}</button>
@@ -212,14 +214,14 @@ function ProductsPanel() {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-bold text-slate-600">عدد المنتجات: {products.length}</p>
+        <p className="text-sm font-bold text-slate-600">عدد المنتجات: {products.length} · المعتمد للعرض: {products.filter(p=>p.public_visible).length}</p>
         <button onClick={startAdd} className="rounded-xl bg-brand-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-800">+ إضافة منتج</button>
       </div>
       {error && <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{error}</p>}
       {products.length === 0 ? (
         <div className="rounded-2xl border border-brand-100 bg-white p-10 text-center">
           <p className="font-black text-brand-950">لا توجد منتجات في قاعدة البيانات بعد</p>
-          <p className="mt-2 text-sm leading-6 text-slate-500">المتجر يعرض الآن الكتالوج الأساسي المدمج. استورده هنا مرة واحدة عشان تقدر تضيف وتعدل وتحذف بنفسك — التغييرات تظهر في المتجر فورًا.</p>
+          <p className="mt-2 text-sm leading-6 text-slate-500">استورد الكتالوج كمسودات خاصة بالإدارة. لا يظهر منتج للعملاء إلا بعد مراجعة البيانات والتصنيف والسماح بالإعلان.</p>
           <button onClick={() => void importDefaults()} disabled={busy} className="mt-4 rounded-xl bg-brand-700 px-6 py-3 text-sm font-bold text-white hover:bg-brand-800 disabled:opacity-60">{busy ? "جارٍ الاستيراد..." : `استيراد الكتالوج الحالي (${PRODUCTS.length} منتجًا)`}</button>
         </div>
       ) : (

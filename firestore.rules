@@ -13,7 +13,7 @@ service cloud.firestore {
 
     // Product catalog: readable by every visitor, writable only by the signed-in manager.
     match /products/{productId} {
-      allow read: if true;
+      allow read: if isManager() || resource.data.public_visible == true;
       allow write: if isManager();
     }
 

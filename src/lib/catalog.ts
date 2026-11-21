@@ -4,18 +4,8 @@ export type Category = {
   icon: string;
 };
 
-export type Product = {
-  id: string;
-  name: string;
-  nameEn: string;
-  category: string;
-  price: number;
-  oldPrice?: number;
-  unit: string;
-  badge?: string;
-  description: string;
-  imageUrl?: string;
-};
+export type { StoreProduct as Product } from "./firebase";
+import type { StoreProduct as Product } from "./firebase";
 
 export const CATEGORIES: Category[] = [
   { id: "all", name: "الكل", icon: "grid" },
