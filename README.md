@@ -22,3 +22,7 @@ pnpm dev
 
 ## Firestore rules
 الملف firestore.rules: إنشاء الطلبات متاح للجميع (checkout)، والقراءة/التحديث للمدير المسجّل فقط.
+
+## Disabled CRM foundation
+
+Source-only staff inbox, saved human-chat client and conversation archive are documented in [docs/CRM-FOUNDATION.md](docs/CRM-FOUNDATION.md). Both CRM activation flags are false. No CRM Hosting site, saved-human-chat storefront mode, archive secret or scheduled CRM sweep is installed. Existing store Hosting configuration and order notification schedule are unchanged. Do not enable CRM before all documented activation checks pass.

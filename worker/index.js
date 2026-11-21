@@ -1,3 +1,4 @@
+import {crmGateway} from './crm-gateway.js';
 import {createOrder,notifyRequest,sweep} from './orders.js';
 const ORIGINS = new Set(['https://one-for-all-good.web.app', 'https://one-for-all-good.firebaseapp.com']);
 const CONTACT = '01018108979';
@@ -24,6 +25,8 @@ export default {
   async fetch(request, env, ctx) {
     const origin = request.headers.get('Origin') || '';
     const path = new URL(request.url).pathname;
+    const crmResponse = await crmGateway(request, env, ctx);
+    if (crmResponse) return crmResponse;
     if (path === '/health' && request.method === 'GET') return json({ok:true, service:'store-assistant', ai:!!env.AI}, origin);
     if (!ORIGINS.has(origin)) return json({error:'origin_not_allowed'}, origin, 403);
     if (request.method === 'OPTIONS') return json({}, origin);

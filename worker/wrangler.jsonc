@@ -27,11 +27,24 @@
         "limit": 3,
         "period": 60
       }
+    },
+    {
+      "name": "CRM_LIMITER",
+      "namespace_id": "1004",
+      "simple": {
+        "limit": 20,
+        "period": 60
+      }
     }
   ],
   "triggers": {
     "crons": [
       "*/10 * * * *"
     ]
+  },
+  "vars": {
+    "CRM_ENABLED": "false",
+    "CRM_LIMITS_VERIFIED": "false",
+    "CRM_OWNER_UID": "CRM_OWNER_UID_NOT_CONFIGURED"
   }
 }

@@ -2,3 +2,11 @@ node_modules
 dist
 .env
 *.local
+
+# Isolated CRM tests and local archive artifacts
+*.log
+__pycache__/
+*.pending
+archive/*.ndjson
+archive/last-success.json
+integration-review/
