@@ -18,3 +18,30 @@ Official references:
 - https://developers.cloudflare.com/workers-ai/models/qwen3.8-27b/
 - https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/
 - https://developers.cloudflare.com/workers/platform/limits/
+
+## Order security and notification bridge
+
+`POST /orders` reads product names and prices from Firestore. It rejects empty carts,
+unknown/duplicate products, noninteger quantities, invalid Egyptian mobile numbers,
+changed totals and oversized input. Client prices/names are never saved. Request UUIDs
+make lost-response retries idempotent. A separate 3/minute/IP binding limits submissions.
+Direct public order/tracking creation is disabled by Firestore rules after rollout.
+
+Required encrypted Worker secrets (never in git): `FIREBASE_SERVICE_ACCOUNT` and
+`BREVO_API_KEY`. The service identity has `roles/datastore.user` only. The Brevo key
+is restricted to transactional email. Both services remain on their free plans.
+
+Notifications go only to the configured Instinct bridge mailbox and include order code,
+status, total, ETA and the manager URL. No names, phones, addresses, notes or product
+lists are sent. New orders and authenticated manager changes trigger a send immediately.
+A 10-minute scheduled sweep retries pending sends and checks late active orders.
+The sweep processes up to 100 active orders plus 100 pending sends per pass, a deliberate
+free-quota bound. It is not a guarantee of instant overdue alerts or unlimited volume.
+Brevo Free allows 300 emails/day; failures remain pending for retry. Gmail senders may
+be rewritten by Brevo for authentication. Email receipt can lag provider acceptance.
+Concurrent sends use optimistic locking. An ambiguous external send can rarely duplicate
+an alert; codes make duplicates recognizable. The key expires in one year or after 90 days
+unused, so expiry needs renewal rather than a paid upgrade.
+
+The browser is not involved in scheduled notifications. The manager panel is still live
+while open; optional sound depends on browser consent and audio settings.
