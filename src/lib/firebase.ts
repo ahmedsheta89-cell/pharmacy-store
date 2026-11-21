@@ -1,6 +1,6 @@
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import {
-  getFirestore, collection, getDoc, setDoc, deleteDoc, writeBatch, serverTimestamp, query, orderBy,
+  getFirestore, collection, getDoc, getDocFromServer, setDoc, deleteDoc, writeBatch, serverTimestamp, query, orderBy,
   onSnapshot, doc, type Firestore, type Unsubscribe,
 } from "firebase/firestore";
 import {
@@ -81,7 +81,7 @@ export type OrderTracking = { status: StoreOrder["status"]; total: number; creat
 export async function lookupOrder(code: string, phone: string): Promise<OrderTracking | null> {
   const ctx = ensure();
   if (!ctx) throw new Error("Firebase غير مهيأ");
-  const snap = await getDoc(doc(ctx.db, "tracking", await trackingKey(code, phone)));
+  const snap = await getDocFromServer(doc(ctx.db, "tracking", await trackingKey(code, phone)));
   if (!snap.exists()) return null;
   const data = snap.data();
   return { status: data.status, total: data.total, created_at: data.created_at };
