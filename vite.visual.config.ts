@@ -1,0 +1,2 @@
+import {defineConfig} from 'vite';import react from '@vitejs/plugin-react';import tailwindcss from '@tailwindcss/vite';import {fileURLToPath} from 'node:url';
+export default defineConfig({plugins:[react(),tailwindcss()],resolve:{alias:[{find:/^\.\.\/lib\/firebase$|^\.\/firebase$/,replacement:fileURLToPath(new URL('./qa/firebase-fixture.js',import.meta.url))}]}});

@@ -1,3 +1,5 @@
+import SeasonalDecor from "./SeasonalDecor";
+import {useStoreAppearance} from "../lib/appearance";
 import { useEffect, useMemo, useState } from "react";
 import { CATEGORIES, formatPrice, type Product } from "../lib/catalog";
 import { watchProducts } from "../lib/firebase";
@@ -27,9 +29,9 @@ function CartIcon() {
   );
 }
 
-function ProductCard({ product, onAdd }: { product: Product; onAdd: () => void }) {
+function ProductCard({ product, onAdd, accepting }: { product: Product; onAdd: () => void; accepting:boolean }) {
   return (
-    <article className="card-hover fade-in overflow-hidden rounded-2xl border border-brand-100 bg-white shadow-sm">
+    <article className="store-product-card card-hover fade-in overflow-hidden rounded-2xl border border-brand-100 bg-white shadow-sm">
       <ProductImage category={product.category} name={product.name} imageUrl={product.imageUrl} />
       <div className="p-4">
         {product.badge && (
@@ -49,7 +51,7 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: () => void }
           </div>
           <button
             onClick={onAdd}
-            disabled={product.stock_quantity===0}
+            disabled={!accepting||product.stock_quantity===0}
             className="rounded-xl bg-brand-700 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-brand-600 active:scale-95"
           >
             {product.stock_quantity===0?"غير متوفر":"+ أضف"}
@@ -61,6 +63,8 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: () => void }
 }
 
 export default function Storefront() {
+  const {appearance,loaded:appearanceLoaded,error:appearanceError}=useStoreAppearance();
+  const accepting=appearanceLoaded&&!appearanceError&&appearance.accepting_orders;
   const [category, setCategory] = useState("all");
   const [query, setQuery] = useState("");
   const { add, count, setOpen } = useCart();
@@ -84,6 +88,7 @@ export default function Storefront() {
   }, [category, query, catalog]);
 
   function handleAdd(product: Product) {
+    if(!accepting)return;
     add(product);
     setJustAdded(product.id);
     setTimeout(() => setJustAdded(null), 1200);
@@ -91,11 +96,13 @@ export default function Storefront() {
 
   return (
     <div className="min-h-screen">
+      <div className="store-announcement">الدفع عند الاستلام · الأسعار والتوفر بيتأكدوا قبل التنفيذ</div>
+      {!accepting&&<div className="store-closed-notice" role="status">{!appearanceLoaded?"جارٍ التحقق من استقبال الطلبات...":appearanceError?"تعذر التحقق من استقبال الطلبات. جرّب تاني بعد شوية.":appearance.closed_message}</div>}
       {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-brand-100 bg-white/90 backdrop-blur">
+      <header className="store-header sticky top-0 z-40 border-b border-brand-100 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
           <a href="/" className="flex items-center gap-2.5">
-            <span className="grid size-10 place-items-center rounded-xl bg-brand-800 text-gold-300">
+            <span className="store-brand-symbol grid size-10 place-items-center rounded-xl bg-brand-800 text-gold-300">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="size-5">
                 <path d="M12 5v14M5 12h14" />
               </svg>
@@ -143,23 +150,24 @@ export default function Storefront() {
       <nav className="bg-brand-50 px-4 py-2 text-center"><a href="/track" className="text-sm font-bold text-brand-800 hover:underline">عندك طلب؟ تابع حالته بكود الطلب ورقم الموبايل ←</a></nav>
 
       {/* Hero */}
-      <section className="relative overflow-hidden bg-brand-900 text-white">
+      <section className="store-hero relative overflow-hidden bg-brand-900 text-white">
+        <SeasonalDecor/><div className="store-halo" aria-hidden="true"/><div className="store-halo store-halo-outer" aria-hidden="true"/>
         <div className="absolute -left-24 -top-24 size-80 rounded-full bg-brand-700/40 blur-3xl" />
         <div className="absolute -bottom-32 -right-16 size-96 rounded-full bg-gold-500/20 blur-3xl" />
-        <div className="relative mx-auto max-w-6xl px-4 py-14 sm:py-20">
+        <div className="store-hero-inner relative mx-auto max-w-6xl px-4 py-14 sm:py-20">
           <span className="inline-flex items-center gap-2 rounded-full border border-gold-400/40 bg-white/5 px-4 py-1.5 text-xs font-bold text-gold-300">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="size-4"><path d="M20 6 9 17l-5-5" /></svg>
-            الدفع عند الاستلام · توصيل سريع
+            الدفع عند الاستلام · التأكيد مع الصيدلية
           </span>
-          <h1 className="mt-5 max-w-2xl text-3xl font-black leading-tight sm:text-5xl">
+          <h1 className="store-headline mt-5 max-w-2xl text-3xl font-black leading-tight sm:text-5xl">
             دواؤك ومستلزماتك،
             <br />
-            <span className="text-gold-300">لحد باب البيت.</span>
+            <span className="store-headline-accent text-gold-300">لحد باب البيت.</span>
           </h1>
           <p className="mt-4 max-w-xl text-sm leading-7 text-brand-100 sm:text-base">
             اطلب من {STORE.name} أونلاين: أدوية، فيتامينات، عناية بالبشرة والشعر، مستلزمات أطفال وأجهزة طبية. اطلب في دقيقة، والدفع كاش عند الاستلام.
           </p>
-          <div className="mt-7 flex flex-wrap gap-3">
+          <div className="store-hero-actions mt-7 flex flex-wrap gap-3">
             <a href="#catalog" className="rounded-xl bg-gold-400 px-6 py-3 text-sm font-black text-brand-950 transition hover:bg-gold-300 active:scale-95">
               تسوق الآن
             </a>
@@ -167,7 +175,7 @@ export default function Storefront() {
               ليه تطلب منا؟
             </a>
           </div>
-          <div className="mt-10 grid max-w-lg grid-cols-3 gap-4 text-center">
+          <div className="store-stats mt-10 grid max-w-lg grid-cols-3 gap-4 text-center">
             {[
               { n: String(catalog.length), t: "منتج في الكتالوج" },
               { n: "بنتابعك", t: "من الطلب للتوصيل" },
@@ -237,10 +245,10 @@ export default function Storefront() {
             <p className="mt-2 text-sm text-slate-500">نعرض فقط المنتجات التي راجعتها الصيدلية واعتمدت السماح بعرضها. تواصل معنا للاستفسار عن منتج.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="store-product-grid grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {visible.map((product) => (
               <div key={product.id} className="relative">
-                <ProductCard product={product} onAdd={() => handleAdd(product)} />
+                <ProductCard product={product} onAdd={() => handleAdd(product)} accepting={accepting} />
                 {justAdded === product.id && (
                   <span className="fade-in absolute left-1/2 top-2 -translate-x-1/2 rounded-full bg-brand-800 px-3 py-1 text-[11px] font-bold text-white shadow-lg">
                     ✓ في السلة
@@ -253,11 +261,11 @@ export default function Storefront() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-brand-100 bg-brand-950 py-10 text-brand-100">
+      <footer className="store-footer border-t border-brand-100 bg-brand-950 py-10 text-brand-100">
         <div className="mx-auto grid max-w-6xl gap-8 px-4 sm:grid-cols-3">
           <div>
             <div className="flex items-center gap-2.5">
-              <span className="grid size-9 place-items-center rounded-xl bg-brand-800 text-gold-300">
+              <span className="store-brand-symbol grid size-9 place-items-center rounded-xl bg-brand-800 text-gold-300">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="size-4"><path d="M12 5v14M5 12h14" /></svg>
               </span>
               <span className="text-base font-black text-white">{STORE.name}</span>

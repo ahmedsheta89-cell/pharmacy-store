@@ -47,6 +47,8 @@ export async function createOrder(request,env,ctx){
  const name=typeof b.customer_name==='string'?b.customer_name.trim():'',address=typeof b.customer_address==='string'?b.customer_address.trim():'',p=phone(b.customer_phone||''),notes=typeof b.notes==='string'?b.notes.trim():'';
  if(!/^[0-9a-f-]{36}$/i.test(b.request_id||'')||name.length<2||name.length>100||address.length<5||address.length>500||!/^1[0125][0-9]{8}$/.test(p)||notes.length>1000||!Array.isArray(b.items)||b.items.length<1||b.items.length>50)return {status:400,body:{error:'invalid_order'}};
  const id='web-'+await digest(b.request_id);let existing=await get(env,'orders/'+id);if(existing)return {status:200,body:{ok:true,orderCode:existing.data.code,total:existing.data.total}};
+ let appearance;try{appearance=await get(env,'store_public/appearance');}catch{return {status:503,body:{error:'settings_unavailable'}};}
+ if(appearance?.data.accepting_orders===false)return {status:503,body:{error:'store_closed'}};
  if(env.ORDER_LIMITER){const rate=await env.ORDER_LIMITER.limit({key:request.headers.get('CF-Connecting-IP')||'unknown'});if(!rate.success)return {status:429,body:{error:'too_many_orders'}};}
  const seen=new Set(),items=[];let total=0;
  for(const item of b.items){if(typeof item.product_id!=='string'||!/^[a-zA-Z0-9_-]{1,100}$/.test(item.product_id)||seen.has(item.product_id)||!Number.isInteger(item.quantity)||item.quantity<1||item.quantity>20)return {status:400,body:{error:'invalid_item'}};seen.add(item.product_id);}
@@ -59,7 +61,7 @@ export async function createOrder(request,env,ctx){
  if(typeof b.total!=='number'||Math.round(b.total*100)!==Math.round(total*100))return {status:409,body:{error:'price_changed',total}};
  const c=code(),tracking=await digest(c+'|'+p),at=new Date().toISOString(),history=[{status:'new',at}];
  const order={customer_name:name,customer_phone:'0'+p,customer_address:address,notes:notes||null,total,items,code:c,tracking_id:tracking,status:'new',created_at:at,updated_at:at,history,notification_pending:true};
- try{await db(env,':commit','POST',{writes:[{update:{name:NAME+'/orders/'+id,fields:fields(order)},currentDocument:{exists:false}},{update:{name:NAME+'/tracking/'+tracking,fields:fields({order_id:id,status:'new',total,created_at:at,history})},currentDocument:{exists:false}}]});}catch(e){if(e.status===409){existing=await get(env,'orders/'+id);if(existing)return {status:200,body:{ok:true,orderCode:existing.data.code,total:existing.data.total}};}throw e;}
+ try{await db(env,':commit','POST',{writes:[{update:{name:NAME+'/orders/'+id,fields:fields(order)},currentDocument:{exists:false}},{update:{name:NAME+'/tracking/'+tracking,fields:fields({order_id:id,status:'new',total,created_at:at,history})},currentDocument:{exists:false}},{verify:NAME+'/store_public/appearance',currentDocument:appearance?{updateTime:appearance.updateTime}:{exists:false}}]});}catch(e){if(e.status===409){existing=await get(env,'orders/'+id);if(existing)return {status:200,body:{ok:true,orderCode:existing.data.code,total:existing.data.total}};}throw e;}
  ctx.waitUntil(notify(env,id).catch(()=>{}));return {status:201,body:{ok:true,orderCode:c,total}};
 }
 export async function notifyRequest(request,env,ctx){

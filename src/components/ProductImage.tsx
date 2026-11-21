@@ -16,13 +16,13 @@ export default function ProductImage({ category, name, imageUrl }: { category: s
   const [imgFailed, setImgFailed] = useState(false);
   if (imageUrl && !imgFailed) {
     return (
-      <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-t-2xl bg-white">
+      <div className="store-product-art relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-t-2xl bg-white">
         <img src={imageUrl} alt={name} loading="lazy" onError={() => setImgFailed(true)} className="size-full object-cover" />
       </div>
     );
   }
   return (
-    <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-t-2xl" style={{ background: `linear-gradient(135deg, ${art.bg}, #ffffff)` }}>
+    <div className="store-product-art relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-t-2xl" style={{ background: `linear-gradient(135deg, ${art.bg}, #ffffff)` }}>
       <div className="absolute -left-6 -top-6 size-24 rounded-full opacity-30" style={{ background: art.accent }} />
       <div className="absolute -bottom-8 -right-8 size-28 rounded-full opacity-20" style={{ background: art.accent }} />
       <svg viewBox="0 0 24 24" fill="none" stroke={art.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="relative size-16 drop-shadow-sm" role="img" aria-label={name}>

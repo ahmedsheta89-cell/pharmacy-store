@@ -34,9 +34,9 @@ export default function StoreChat() {
     } finally { clearTimeout(timeout); setBusy(false); }
   }
   return <div dir="rtl" className="fixed bottom-4 left-4 z-40 sm:bottom-6 sm:left-6">
-    {open && <section aria-label="مساعد المتجر" onKeyDown={(e) => { if (e.key === "Escape") close(); }} className="mb-3 flex h-[min(580px,80dvh)] w-[min(380px,calc(100vw-32px))] flex-col overflow-hidden rounded-3xl border border-brand-100 bg-white text-brand-950 shadow-2xl">
+    {open && <section aria-label="مساعد المتجر" onKeyDown={(e) => { if (e.key === "Escape") close(); }} className="store-chat mb-3 flex h-[min(580px,80dvh)] w-[min(380px,calc(100vw-32px))] flex-col overflow-hidden rounded-3xl border border-brand-100 bg-white text-brand-950 shadow-2xl">
       <header className="flex items-center justify-between bg-brand-900 px-5 py-4 text-white"><div><h2 className="font-black">مساعد المتجر</h2><p className="mt-1 text-[11px] text-white/70">رد آلي للتسوق، مش استشارة طبية</p></div><button onClick={close} aria-label="إغلاق الدردشة" className="grid size-9 place-items-center rounded-full bg-white/10 text-xl hover:bg-white/20">×</button></header>
-      <p className="border-b border-brand-50 bg-brand-50/70 px-4 py-2 text-[10px] leading-5 text-slate-600">متبعتش بيانات صحية أو شخصية. سؤالك ممكن يتعالج بخدمة ذكاء اصطناعي خارجية. الردود ممكن تغلط، والتفاصيل النهائية مع الصيدلي.</p>
+      <p className="store-chat-notice border-b border-brand-50 bg-brand-50/70 px-4 py-2 text-[10px] leading-5 text-slate-600">متبعتش بيانات صحية أو شخصية. سؤالك ممكن يتعالج بخدمة ذكاء اصطناعي خارجية. الردود ممكن تغلط، والتفاصيل النهائية مع الصيدلي.</p>
       <div role="log" aria-live="polite" aria-relevant="additions" className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
         {messages.map((m, i) => <p key={i} className={`max-w-[92%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-7 ${m.role === "user" ? "mr-auto bg-brand-700 text-white" : "ml-auto bg-brand-50 text-brand-950"}`}><span className="sr-only">{m.role === "user" ? "أنت: " : "مساعد المتجر: "}</span>{m.text}</p>)}
         {busy && <p role="status" className="text-xs text-slate-500">المساعد بيكتب...</p>}<div ref={end} />
