@@ -1,6 +1,6 @@
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import {
-  getFirestore, collection, addDoc, serverTimestamp, query, orderBy,
+  getFirestore, collection, addDoc, setDoc, deleteDoc, writeBatch, serverTimestamp, query, orderBy,
   onSnapshot, updateDoc, doc, type Firestore, type Unsubscribe,
 } from "firebase/firestore";
 import {
@@ -121,4 +121,52 @@ export async function managerSendPasswordReset(email: string): Promise<void> {
   const ctx = ensure();
   if (!ctx) throw new Error("Firebase غير مهيأ بعد - أكمل إعداد المشروع أولًا.");
   await sendPasswordResetEmail(ctx.auth, email);
+}
+
+// ---- Product catalog (Firestore-backed, manager-managed) ----
+
+export type StoreProduct = {
+  id: string;
+  name: string;
+  nameEn: string;
+  category: string;
+  price: number;
+  oldPrice?: number;
+  unit: string;
+  badge?: string;
+  description: string;
+  imageUrl?: string;
+};
+
+export function watchProducts(callback: (products: StoreProduct[]) => void): Unsubscribe | null {
+  const ctx = ensure();
+  if (!ctx) return null;
+  const q = query(collection(ctx.db, "products"), orderBy("name"));
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<StoreProduct, "id">) })));
+  });
+}
+
+export async function upsertProduct(product: StoreProduct): Promise<void> {
+  const ctx = ensure();
+  if (!ctx) throw new Error("Firebase غير مهيأ");
+  const { id, ...data } = product;
+  await setDoc(doc(ctx.db, "products", id), Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined)));
+}
+
+export async function deleteProductById(productId: string): Promise<void> {
+  const ctx = ensure();
+  if (!ctx) throw new Error("Firebase غير مهيأ");
+  await deleteDoc(doc(ctx.db, "products", productId));
+}
+
+export async function seedProducts(products: StoreProduct[]): Promise<void> {
+  const ctx = ensure();
+  if (!ctx) throw new Error("Firebase غير مهيأ");
+  const batch = writeBatch(ctx.db);
+  for (const product of products) {
+    const { id, ...data } = product;
+    batch.set(doc(ctx.db, "products", id), data);
+  }
+  await batch.commit();
 }

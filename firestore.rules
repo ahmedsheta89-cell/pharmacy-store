@@ -1,7 +1,10 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Orders: anyone can create (COD checkout), only the signed-in manager can read or update.
+    function isManager() {
+      return request.auth != null && request.auth.token.email == "ahmedsheta89@gmail.com";
+    }
+    // Private customer records are never readable without manager identity.
     match /orders/{orderId} {
       allow create: if
         request.resource.data.keys().hasAll(['customer_name', 'customer_phone', 'customer_address', 'total', 'items', 'status', 'code'])
@@ -19,7 +22,14 @@ service cloud.firestore {
         && request.resource.data.status == 'new'
         && request.resource.data.code is string
         && request.resource.data.code.size() <= 10;
-      allow read, update, delete: if request.auth != null;
+      allow read, update, delete: if isManager();
     }
+
+    // Product catalog: readable by every visitor, writable only by the signed-in manager.
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isManager();
+    }
+
   }
 }

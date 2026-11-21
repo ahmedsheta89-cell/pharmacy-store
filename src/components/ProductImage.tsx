@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 const CATEGORY_ART: Record<string, { bg: string; accent: string; glyph: string }> = {
   medicine: { bg: "#d7efe4", accent: "#1c6e56", glyph: "M9 3a5 5 0 0 1 7.07 0l4.9 4.9a5 5 0 0 1-7.07 7.07l-4.9-4.9A5 5 0 0 1 9 3Zm1.4 1.42a3 3 0 0 0 0 4.24l2.48 2.48 4.24-4.24-2.48-2.48a3 3 0 0 0-4.24 0ZM3 15l4 4m-5 1a2 2 0 1 0 4 0 2 2 0 0 0-4 0Z" },
   cold: { bg: "#dbeafe", accent: "#1d4ed8", glyph: "M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0ZM12 15a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z" },
@@ -9,8 +11,16 @@ const CATEGORY_ART: Record<string, { bg: string; accent: string; glyph: string }
   hygiene: { bg: "#d1fae5", accent: "#047857", glyph: "M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4Zm-3 10l2.2 2.2L15.5 10" },
 };
 
-export default function ProductImage({ category, name }: { category: string; name: string }) {
+export default function ProductImage({ category, name, imageUrl }: { category: string; name: string; imageUrl?: string }) {
   const art = CATEGORY_ART[category] ?? CATEGORY_ART.medicine;
+  const [imgFailed, setImgFailed] = useState(false);
+  if (imageUrl && !imgFailed) {
+    return (
+      <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-t-2xl bg-white">
+        <img src={imageUrl} alt={name} loading="lazy" onError={() => setImgFailed(true)} className="size-full object-cover" />
+      </div>
+    );
+  }
   return (
     <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-t-2xl" style={{ background: `linear-gradient(135deg, ${art.bg}, #ffffff)` }}>
       <div className="absolute -left-6 -top-6 size-24 rounded-full opacity-30" style={{ background: art.accent }} />
