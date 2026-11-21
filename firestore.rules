@@ -38,5 +38,61 @@ service cloud.firestore {
         && request.resource.data.created_at is string
         && get(/databases/$(database)/documents/tracking/$(trackingId)).data.status == 'delivered';
     }
+    // Explicit POS boundary must survive any merge with POS PR15.
+    match /pos_tenants/{document=**} { allow read, write: if false; }
+    // CRM v3: disabled at rules level until deliberate owner UID migration.
+    function crmOwner() {
+      return request.auth != null && request.auth.uid == "CRM_OWNER_UID_NOT_CONFIGURED"
+        && request.auth.token.email_verified == true
+        && exists(/databases/$(database)/documents/staff/$(request.auth.uid))
+        && get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.active == true
+        && get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.role == 'owner';
+    }
+    // CRM v2: owner bootstrap must be pinned to a verified UID before rollout.
+    function staff() {
+      return request.auth != null && exists(/databases/$(database)/documents/staff/$(request.auth.uid))
+        && get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.active == true;
+    }
+    function canRead(c) {
+      return crmOwner() || (staff() && c.assignee_uid == request.auth.uid);
+    }
+    function parentConv(id) { return get(/databases/$(database)/documents/conversations/$(id)).data; }
+    match /staff/{uid} {
+      allow read: if crmOwner() || (staff() && uid == request.auth.uid);
+      allow write: if crmOwner();
+    }
+    match /departments/{id} { allow read: if crmOwner() || staff(); allow write: if crmOwner(); }
+    match /customers/{id} { allow read: if crmOwner(); allow write: if false; }
+    match /conversations/{id} {
+      allow read: if canRead(resource.data);
+      allow write: if false;
+      match /messages/{messageId} {
+        allow read: if canRead(parentConv(id));
+        allow write: if false;
+      }
+      match /order_cards/{orderId} {
+        allow read: if canRead(parentConv(id));
+        allow write: if false;
+      }
+      match /presence/{uid} {
+        allow read: if canRead(parentConv(id));
+        allow create, update: if canRead(parentConv(id)) && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['state','at'])
+          && request.resource.data.state in ['viewing','typing'] && request.resource.data.at == request.time;
+        allow delete: if canRead(parentConv(id)) && request.auth.uid == uid;
+      }
+    }
+    match /savedReplies/{id} {
+      allow read: if crmOwner() || staff();
+      allow create, update: if crmOwner() && request.resource.data.title is string
+        && request.resource.data.title.size() <= 100 && request.resource.data.body is string && request.resource.data.body.size() <= 2000;
+      allow delete: if crmOwner();
+    }
+    match /automationRules/{id} { allow read, write: if crmOwner(); }
+    match /agent_metrics/{uid}/days/{day} {
+      allow read: if crmOwner() || (staff() && request.auth.uid == uid);
+      allow write: if false;
+    }
+    match /auditLog/{id} { allow read: if crmOwner(); allow write: if false; }
   }
 }

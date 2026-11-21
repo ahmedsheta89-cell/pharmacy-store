@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:crm": "node --test worker/test/*.test.js",
+    "build:crm": "pnpm --dir crm build"
   },
   "dependencies": {
     "exceljs": "4.4.0",
