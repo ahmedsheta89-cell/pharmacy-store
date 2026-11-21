@@ -185,10 +185,10 @@ export default function Storefront() {
       <section id="trust" className="border-b border-brand-100 bg-white">
         <div className="mx-auto grid max-w-6xl grid-cols-2 gap-3 px-4 py-6 sm:grid-cols-4">
           {[
-            { t: "منتجات أصلية 100%", d: "من موزعين معتمدين" },
+            { t: "كتالوج سهل", d: "الأسعار والتوفر بيتأكدوا قبل التنفيذ" },
             { t: "الدفع عند الاستلام", d: "بدون بطاقات أو محافظ" },
-            { t: "صيدلي متاح", d: "للاستشارة قبل الطلب" },
-            { t: "استبدال سهل", d: "لو المنتج غير مطابق" },
+            { t: "تواصل مع الصيدلي", d: "اسأل قبل استخدام أي دواء" },
+            { t: "متابعة بعد الطلب", d: "لأي مشكلة، تواصل بكود الطلب" },
           ].map((f) => (
             <div key={f.t} className="flex items-start gap-2.5 rounded-2xl bg-brand-50 p-3.5">
               <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg bg-brand-700 text-white">
