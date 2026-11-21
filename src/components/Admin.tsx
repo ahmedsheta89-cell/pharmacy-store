@@ -6,6 +6,7 @@ import {
   type StoreOrder, type StoreProduct,
 } from "../lib/firebase";
 import { STORE } from "../lib/site";
+import BannersPanel from "./BannersPanel";
 
 const STATUS_LABEL: Record<StoreOrder["status"], string> = {
   new: "جديد",
@@ -264,7 +265,7 @@ export default function Admin() {
   const [resetMessage, setResetMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [orders, setOrders] = useState<StoreOrder[] | null>(null);
-  const [tab, setTab] = useState<"orders" | "products">("orders");
+  const [tab, setTab] = useState<"orders" | "products" | "banners">("orders");
 
   useEffect(() => {
     const unsub = watchAuth((u) => { setSignedIn(Boolean(u)); setAuthChecked(true); });
@@ -357,11 +358,12 @@ export default function Admin() {
           </form>
         ) : (
           <>
-            <div className="mb-5 flex gap-2">
+            <div className="mb-5 flex flex-wrap gap-2">
               <button onClick={() => setTab("orders")} className={`rounded-xl px-5 py-2.5 text-sm font-bold transition ${tab === "orders" ? "bg-brand-700 text-white" : "border border-brand-100 bg-white text-slate-600 hover:bg-brand-50"}`}>الطلبات</button>
               <button onClick={() => setTab("products")} className={`rounded-xl px-5 py-2.5 text-sm font-bold transition ${tab === "products" ? "bg-brand-700 text-white" : "border border-brand-100 bg-white text-slate-600 hover:bg-brand-50"}`}>المنتجات</button>
+              <button onClick={() => setTab("banners")} className={`rounded-xl px-5 py-2.5 text-sm font-bold transition ${tab === "banners" ? "bg-brand-700 text-white" : "border border-brand-100 bg-white text-slate-600 hover:bg-brand-50"}`}>الإعلانات والعروض</button>
             </div>
-            {tab === "orders" ? <OrdersPanel orders={orders} /> : <ProductsPanel />}
+            {tab === "orders" ? <OrdersPanel orders={orders} /> : tab === "products" ? <ProductsPanel /> : <BannersPanel />}
           </>
         )}
       </main>

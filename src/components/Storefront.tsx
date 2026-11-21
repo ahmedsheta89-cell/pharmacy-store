@@ -5,6 +5,7 @@ import { STORE } from "../lib/site";
 import { useCart } from "../lib/cart";
 import ProductImage from "./ProductImage";
 import CartDrawer from "./CartDrawer";
+import { StorePromos } from "./BannersPanel";
 
 function SearchIcon() {
   return (
@@ -202,6 +203,8 @@ export default function Storefront() {
       </section>
 
       {/* Catalog */}
+      <StorePromos />
+
       <main id="catalog" className="mx-auto max-w-6xl px-4 py-10">
         <div className="mb-6 flex items-end justify-between">
           <div>

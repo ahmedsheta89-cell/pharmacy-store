@@ -47,5 +47,9 @@ service cloud.firestore {
         && getAfter(/databases/$(database)/documents/orders/$(request.resource.data.order_id)).data.total == request.resource.data.total;
       allow update, delete: if isManager();
     }
+    match /banners/{bannerId} {
+      allow read: if true;
+      allow write: if isManager();
+    }
   }
 }
