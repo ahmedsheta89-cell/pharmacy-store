@@ -17,15 +17,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - name: Publish Firestore security rules
-        env:
-          SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-        run: |
-          umask 077
-          printf '%s' "$SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-account.json"
-          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/firebase-account.json"
-          npx --yes firebase-tools@14 deploy --only firestore:rules --project one-for-all-good --non-interactive
-          rm -f "$RUNNER_TEMP/firebase-account.json"
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
