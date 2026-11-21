@@ -36,7 +36,7 @@ status, total, ETA and the manager URL. No names, phones, addresses, notes or pr
 lists are sent. New orders and authenticated manager changes trigger a send immediately.
 A 10-minute scheduled sweep retries pending sends and checks late active orders.
 The sweep processes up to 100 active orders plus 100 pending sends per pass, a deliberate
-free-quota bound. It is not a guarantee of instant overdue alerts or unlimited volume.
+free-quota bound. At most 10 changed orders are emailed per sweep to stay below the free Worker subrequest cap. Busy queues can take longer. It is not a guarantee of instant overdue alerts or unlimited volume.
 Brevo Free allows 300 emails/day; failures remain pending for retry. Gmail senders may
 be rewritten by Brevo for authentication. Email receipt can lag provider acceptance.
 Concurrent sends use optimistic locking. An ambiguous external send can rarely duplicate

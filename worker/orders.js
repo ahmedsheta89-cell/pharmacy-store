@@ -28,7 +28,7 @@ const labels={new:'new',confirmed:'confirmed',preparing:'preparing',out_for_deli
 async function notify(env,id,snapshot=null){
  let snap=snapshot||await get(env,'orders/'+id);if(!snap)return;let o=snap.data;if(o.qa_test)return;
  const state=o.notification_state||{},now=Date.now(),active=!['delivered','cancelled'].includes(o.status),late=active&&o.expected_at&&Date.parse(o.expected_at)<now;
- let events=[];if(state.status!==o.status)events.push(o.status==='new'?'new_order':'status_changed');if(o.expected_at&&state.expected_at!==o.expected_at)events.push('eta_changed');if(late&&state.late_for!==o.expected_at)events.push('overdue');if(!events.length)return;
+ let events=[];if(state.status!==o.status)events.push(o.status==='new'?'new_order':'status_changed');if(o.expected_at&&state.expected_at!==o.expected_at)events.push('eta_changed');if(late&&state.late_for!==o.expected_at)events.push('overdue');if(!events.length){if(o.notification_pending)await db(env,':commit','POST',{writes:[{update:{name:NAME+'/orders/'+id,fields:fields({notification_pending:false})},updateMask:{fieldPaths:['notification_pending']},currentDocument:{updateTime:snap.updateTime}}]});return;}
  if(state.sending_at&&now-Date.parse(state.sending_at)<120000)return;
  const sending={...state,sending_at:new Date().toISOString()};
  let claim;try{claim=await db(env,':commit','POST',{writes:[{update:{name:NAME+'/orders/'+id,fields:fields({notification_state:sending})},updateMask:{fieldPaths:['notification_state']},currentDocument:{updateTime:snap.updateTime}}]});}catch(e){if([409,412].includes(e.status))return;throw e;}
@@ -49,7 +49,11 @@ export async function createOrder(request,env,ctx){
  const id='web-'+await digest(b.request_id);let existing=await get(env,'orders/'+id);if(existing)return {status:200,body:{ok:true,orderCode:existing.data.code,total:existing.data.total}};
  if(env.ORDER_LIMITER){const rate=await env.ORDER_LIMITER.limit({key:request.headers.get('CF-Connecting-IP')||'unknown'});if(!rate.success)return {status:429,body:{error:'too_many_orders'}};}
  const seen=new Set(),items=[];let total=0;
- for(const item of b.items){if(typeof item.product_id!=='string'||!/^[a-zA-Z0-9_-]{1,100}$/.test(item.product_id)||seen.has(item.product_id)||!Number.isInteger(item.quantity)||item.quantity<1||item.quantity>20)return {status:400,body:{error:'invalid_item'}};seen.add(item.product_id);const product=await get(env,'products/'+item.product_id);const price=product?.data.price;if(!product||typeof price!=='number'||!Number.isFinite(price)||price<0)return {status:400,body:{error:'product_unavailable'}};items.push({product_id:item.product_id,product_name:product.data.name,unit_price:price,quantity:item.quantity});total+=Math.round(price*100)*item.quantity;}
+ for(const item of b.items){if(typeof item.product_id!=='string'||!/^[a-zA-Z0-9_-]{1,100}$/.test(item.product_id)||seen.has(item.product_id)||!Number.isInteger(item.quantity)||item.quantity<1||item.quantity>20)return {status:400,body:{error:'invalid_item'}};seen.add(item.product_id);}
+ // One batch request keeps large carts below the free Worker's subrequest cap.
+ const productRows=await db(env,':batchGet','POST',{documents:b.items.map(item=>NAME+'/products/'+item.product_id)});
+ const catalog=new Map(productRows.filter(row=>row.found).map(row=>[row.found.name.split('/').pop(),object(row.found.fields)]));
+ for(const item of b.items){const product=catalog.get(item.product_id),price=product?.price;if(!product||typeof price!=='number'||!Number.isFinite(price)||price<0)return {status:400,body:{error:'product_unavailable'}};items.push({product_id:item.product_id,product_name:product.name,unit_price:price,quantity:item.quantity});total+=Math.round(price*100)*item.quantity;}
  total/=100;if(total<=0||total>1000000)return {status:400,body:{error:'invalid_total'}};
  // Price changes require the customer to review the new total before submitting again.
  if(typeof b.total!=='number'||Math.round(b.total*100)!==Math.round(total*100))return {status:409,body:{error:'price_changed',total}};
@@ -68,5 +72,9 @@ export async function sweep(env){
  const rows=await db(env,':runQuery','POST',{structuredQuery:{from:[{collectionId:'orders'}],where:{fieldFilter:{field:{fieldPath:'status'},op:'IN',value:val(['new','confirmed','preparing','out_for_delivery'])}},limit:100}});
  const pending=await db(env,':runQuery','POST',{structuredQuery:{from:[{collectionId:'orders'}],where:{fieldFilter:{field:{fieldPath:'notification_pending'},op:'EQUAL',value:val(true)}},limit:100}});
  const docs=new Map([...rows,...pending].filter(x=>x.document).map(x=>[x.document.name,x.document]));
- for(const d of docs.values()){const id=d.name.split('/').pop();try{await notify(env,id,{data:object(d.fields),updateTime:d.updateTime});}catch{}}
+ let handled=0;
+ for(const d of docs.values()){const data=object(d.fields),state=data.notification_state||{},late=!['delivered','cancelled'].includes(data.status)&&data.expected_at&&Date.parse(data.expected_at)<Date.now();
+ if(!data.notification_pending&&state.status===data.status&&(!data.expected_at||state.expected_at===data.expected_at)&&(!late||state.late_for===data.expected_at))continue;
+ // At most ten changed orders per pass, safely below the free 50-subrequest limit.
+ if(handled++>=10)break;const id=d.name.split('/').pop();try{await notify(env,id,{data,updateTime:d.updateTime});}catch{}}
 }
