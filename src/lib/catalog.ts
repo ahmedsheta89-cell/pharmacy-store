@@ -14,6 +14,7 @@ export type Product = {
   unit: string;
   badge?: string;
   description: string;
+  imageUrl?: string;
 };
 
 export const CATEGORIES: Category[] = [

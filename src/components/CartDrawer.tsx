@@ -94,7 +94,7 @@ export default function CartDrawer() {
                   {lines.map(({ product, quantity }) => (
                     <li key={product.id} className="flex gap-3 rounded-2xl border border-brand-100 p-3">
                       <div className="w-16 shrink-0 overflow-hidden rounded-xl [&>div]:rounded-xl">
-                        <ProductImage category={product.category} name={product.name} />
+                        <ProductImage category={product.category} name={product.name} imageUrl={product.imageUrl} />
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="line-clamp-1 text-sm font-bold text-brand-950">{product.name}</p>

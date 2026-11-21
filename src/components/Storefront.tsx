@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CATEGORIES, PRODUCTS, formatPrice, type Product } from "../lib/catalog";
+import { watchProducts } from "../lib/firebase";
 import { STORE } from "../lib/site";
 import { useCart } from "../lib/cart";
 import ProductImage from "./ProductImage";
@@ -27,7 +28,7 @@ function CartIcon() {
 function ProductCard({ product, onAdd }: { product: Product; onAdd: () => void }) {
   return (
     <article className="card-hover fade-in overflow-hidden rounded-2xl border border-brand-100 bg-white shadow-sm">
-      <ProductImage category={product.category} name={product.name} />
+      <ProductImage category={product.category} name={product.name} imageUrl={product.imageUrl} />
       <div className="p-4">
         {product.badge && (
           <span className="mb-2 inline-block rounded-full bg-gold-400/20 px-2.5 py-0.5 text-[11px] font-bold text-brand-800">
@@ -61,15 +62,23 @@ export default function Storefront() {
   const [query, setQuery] = useState("");
   const { add, count, setOpen } = useCart();
   const [justAdded, setJustAdded] = useState<string | null>(null);
+  const [liveProducts, setLiveProducts] = useState<Product[] | null>(null);
+
+  useEffect(() => {
+    const unsub = watchProducts((products) => setLiveProducts(products));
+    return () => unsub?.();
+  }, []);
+
+  const catalog = liveProducts ?? PRODUCTS;
 
   const visible = useMemo(() => {
     const q = query.trim();
-    return PRODUCTS.filter((p) => {
+    return catalog.filter((p) => {
       const inCategory = category === "all" || p.category === category;
       const inQuery = !q || p.name.includes(q) || p.nameEn.toLowerCase().includes(q.toLowerCase()) || p.description.includes(q);
       return inCategory && inQuery;
     });
-  }, [category, query]);
+  }, [category, query, catalog]);
 
   function handleAdd(product: Product) {
     add(product);
