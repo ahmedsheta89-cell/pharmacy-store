@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Orders: anyone can create (COD checkout), only the signed-in manager can read or update.
+    match /orders/{orderId} {
+      allow create: if
+        request.resource.data.keys().hasAll(['customer_name', 'customer_phone', 'customer_address', 'total', 'items', 'status', 'code'])
+        && request.resource.data.customer_name is string
+        && request.resource.data.customer_name.size() <= 100
+        && request.resource.data.customer_phone is string
+        && request.resource.data.customer_phone.size() <= 20
+        && request.resource.data.customer_address is string
+        && request.resource.data.customer_address.size() <= 500
+        && request.resource.data.total is number
+        && request.resource.data.total >= 0
+        && request.resource.data.total <= 1000000
+        && request.resource.data.items is list
+        && request.resource.data.items.size() <= 50
+        && request.resource.data.status == 'new'
+        && request.resource.data.code is string
+        && request.resource.data.code.size() <= 10;
+      allow read, update, delete: if request.auth != null;
+    }
+  }
+}

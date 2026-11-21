@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Tajawal", ui-sans-serif, system-ui, sans-serif;
+  --color-brand-50: #eff8f4;
+  --color-brand-100: #d7efe4;
+  --color-brand-200: #b3e0cd;
+  --color-brand-300: #7fc7ac;
+  --color-brand-400: #4aa887;
+  --color-brand-500: #2a8a6b;
+  --color-brand-600: #1c6e56;
+  --color-brand-700: #145844;
+  --color-brand-800: #0f4434;
+  --color-brand-900: #0b3d33;
+  --color-brand-950: #062a22;
+  --color-gold-300: #f2dc9b;
+  --color-gold-400: #e9c86e;
+  --color-gold-500: #d4af37;
+}
+
+html {
+  font-family: var(--font-sans);
+  scroll-behavior: smooth;
+}
+
+body {
+  background: #f7faf8;
+  color: #172a24;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--color-brand-200);
+}
+
+.card-hover {
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 40px -12px rgba(11, 61, 51, 0.25);
+}
+
+.fade-in {
+  animation: fadeIn 0.35s ease both;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.drawer-slide {
+  animation: slideIn 0.3s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+@keyframes slideIn {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
