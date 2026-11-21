@@ -202,3 +202,29 @@ export async function seedProducts(products: StoreProduct[]): Promise<void> {
   }
   await batch.commit();
 }
+
+export type PromoBanner = {
+  id: string;
+  title: string;
+  text: string;
+  imageUrl: string;
+  linkUrl: string;
+  linkLabel: string;
+  enabled: boolean;
+};
+export function watchBanners(callback: (banners: PromoBanner[]) => void): Unsubscribe | null {
+  const ctx = ensure();
+  if (!ctx) return null;
+  return onSnapshot(collection(ctx.db, "banners"), (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as PromoBanner))));
+}
+export async function saveBanner(banner: PromoBanner): Promise<void> {
+  const ctx = ensure();
+  if (!ctx) throw new Error("Firebase غير مهيأ");
+  const { id, ...data } = banner;
+  await setDoc(doc(ctx.db, "banners", id), data);
+}
+export async function deleteBanner(id: string): Promise<void> {
+  const ctx = ensure();
+  if (!ctx) throw new Error("Firebase غير مهيأ");
+  await deleteDoc(doc(ctx.db, "banners", id));
+}
