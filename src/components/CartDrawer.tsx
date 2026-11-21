@@ -121,7 +121,7 @@ export default function CartDrawer() {
             {lines.length > 0 && (
               <footer className="border-t border-brand-100 px-5 py-4">
                 <div className="mb-1 flex items-center justify-between text-sm text-slate-500">
-                  <span>التوصيل</span><span className="font-bold text-brand-700">مجاني</span>
+                  <span>تكلفة التوصيل</span><span className="font-bold text-brand-700">بتتأكد مع الصيدلية</span>
                 </div>
                 <div className="mb-4 flex items-center justify-between">
                   <span className="font-bold text-brand-950">الإجمالي</span>
@@ -158,9 +158,10 @@ export default function CartDrawer() {
             {error && <p className="mt-3 rounded-xl bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-700">{error}</p>}
             <div className="mt-auto pt-4">
               <div className="mb-3 flex items-center justify-between rounded-xl bg-brand-50 px-4 py-3">
-                <span className="text-sm font-bold text-slate-600">الإجمالي - الدفع عند الاستلام</span>
+                <span className="text-sm font-bold text-slate-600">إجمالي المنتجات - الدفع عند الاستلام</span>
                 <span className="text-lg font-black text-brand-700">{formatPrice(total)}</span>
               </div>
+              <p className="text-xs leading-6 text-slate-500">المبلغ المعروض للمنتجات. التوفر وأي تكلفة توصيل بيتأكدوا معاك قبل تنفيذ الطلب. أي دواء يحتاج وصفة بيُراجع مع الصيدلي.</p>
               <button type="submit" disabled={sending} className="w-full rounded-xl bg-brand-700 py-3.5 text-sm font-bold text-white shadow-md hover:bg-brand-800 disabled:opacity-60">
                 {sending ? "جارٍ إرسال الطلب..." : "تأكيد الطلب"}
               </button>
@@ -178,7 +179,7 @@ export default function CartDrawer() {
             </span>
             <h3 className="text-xl font-black text-brand-950">شكرًا لك! استلمنا طلبك</h3>
             <p className="text-sm text-slate-600">رقم الطلب: <span dir="ltr" className="font-black text-brand-700">{orderCode}</span></p>
-            <p className="text-sm leading-6 text-slate-600">سنتواصل معك على رقمك لتأكيد الطلب، والتوصيل مجاني. الدفع نقدًا عند الاستلام.</p>
+            <p className="text-sm leading-6 text-slate-600">الصيدلية هتتواصل معاك لتأكيد التوفر وإجمالي الطلب وتكلفة التوصيل قبل التنفيذ. الدفع نقدًا عند الاستلام.</p>
             <p className="rounded-xl bg-gold-300/30 p-3 text-sm font-bold text-brand-950">احتفظ بكود الطلب أو صوّر الشاشة. تحتاج الكود ورقم موبايلك لمتابعة الحالة.</p>
             <a href="/track" className="rounded-xl bg-brand-700 px-6 py-3 text-sm font-bold text-white">تتبع طلبي</a>
             <button onClick={close} className="mt-2 rounded-xl bg-brand-700 px-6 py-3 text-sm font-bold text-white hover:bg-brand-800">متابعة التسوق</button>
