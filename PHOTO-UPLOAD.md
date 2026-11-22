@@ -1,6 +1,6 @@
 # Direct product photo upload
 
-Status: local implementation with unit tests, visual checks and a disposable-emulator integration test. Not deployed and not a verified production-owner journey.
+Release checkpoint, November 22, 2026: integrated with the deployed reset/review fixes. The guarded Worker backend is live as de473191-9891-451e-b2da-d43a90f8cfbb. The single-product UI is the first Hosting release step; the bulk panel is intentionally not exposed in that step. This is not a verified production-owner journey.
 
 ## Flow
 
@@ -64,7 +64,7 @@ The formats script covers ordinary JPEG, EXIF rotation, lossy/lossless/animated 
 
 The integration script runs the actual Admin UI, actual client upload helper and actual Worker handler with Auth and Firestore emulators and an in-memory KV. The browser's Firebase SDK is deduplicated to the production version and asserted by the test. The external token lookup is bridged to the Auth emulator and the local CORS boundary is adapted for the fixture. It signs in, uploads, saves through the product transaction, reloads and renders the persisted image bytes. Manual hiding remains true, review becomes unreviewed and public visibility remains false. This does not test a production token lookup, real KV propagation or the owner's live session.
 
-Before release: complete independent review; recheck the exact free plan, quota, namespace and rate-limiter bindings; and validate the authenticated owner upload/save/reload journey on an approved isolated preview or owner session. Production deployment stays held. No production product mutation, image upload or deployment was performed by these local checks.
+Release verification: current Workers Free/$0 plan and the existing namespace were checked live. Backend health, CORS, unauthenticated rejection, invalid checkout and existing FAQ probes pass. A clearly labeled synthetic image was written to an otherwise absent unlinked test key, read byte-for-byte through the live media handler, and removed from KV afterward. No product document was created or changed. Authenticated owner upload/save/reload still requires the owner's own session; local checks do not establish that live journey.
 
 ## Reviewed bulk workflow
 

@@ -1,6 +1,6 @@
 # Reviewed bulk product photos
 
-Status: implemented and tested locally, including the actual UI/client/Worker/data-layer path with disposable Auth and Firestore emulators. Not pushed, deployed or verified in the owner's production session. This is not a release claim.
+Release checkpoint: integrated with the live review/reset fixes and retested with the actual UI/client/Worker/data-layer path and disposable Auth/Firestore. The bulk panel is intentionally hidden in the first single-uploader release. Its separate enablement follows the single-uploader live check. The owner's production session has not been used for QA.
 
 ## Existing foundations
 
@@ -76,6 +76,6 @@ See `PHOTO-UPLOAD.md` for reproducible commands and release checks. The rate-bin
 
 ## Release gate
 
-The local hosting workflow currently deploys only a push to main or manual dispatch. Recheck the live workflow before relying on a branch push being non-deploying. Do not merge or manually deploy as a side effect of this work. Production-owner photo QA remains open. A Hosting preview alone must not be called an isolated backend: verify its Firebase/Worker targets and allowed Origin before offering that route. Do not bypass the stale manager password or change authentication to get a test pass.
+The local hosting workflow currently deploys only a push to main or manual dispatch. Recheck the live workflow before relying on a branch push being non-deploying. The first single-uploader release must not expose the bulk panel accidentally. Production-owner photo QA remains open. A Hosting preview alone must not be called an isolated backend: verify its Firebase/Worker targets and allowed Origin before offering that route. Do not bypass the stale manager password or change authentication to get a test pass.
 
 Visual AI remains a separate optional step. The exact Qwen account schema and Free REST image path are now verified, including three successful synthetic-image requests. Two clear labels with different strengths/counts were transcribed correctly; an unreadable image returned unknown fields. This is not real-pack accuracy or a store vision feature. See `VISION-FEASIBILITY.md`. No new license, billing or private-image use was enabled.
