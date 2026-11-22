@@ -11,6 +11,7 @@ import { RESET_REQUEST_ACCEPTED, passwordResetErrorMessage } from "../lib/passwo
 import { STORE } from "../lib/site";
 import CatalogExcel from "./CatalogExcel";
 import ProductReviewFields from "./ProductReviewFields";
+import ProductPhotoField from "./ProductPhotoField";
 import BannersPanel from "./BannersPanel";
 
 import OrderDeliveryPanel, { STATUS_LABEL } from "./OrderDeliveryPanel";
@@ -89,6 +90,7 @@ function ProductsPanel() {
   const [products, setProducts] = useState<StoreProduct[] | null>(null);
   const [editing, setEditing] = useState<StoreProduct | null>(null);
   const [isNew, setIsNew] = useState(false);
+  const [photoPending, setPhotoPending] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -119,7 +121,7 @@ function ProductsPanel() {
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editing) return;
+    if (!editing || photoPending) return;
     setBusy(true);
     setError("");
     const id = isNew ? `${slugifyId(editing.nameEn || editing.name)}-${crypto.randomUUID().slice(0, 8)}` : editing.id;
@@ -208,15 +210,12 @@ function ProductsPanel() {
           <span className="mb-1.5 block text-sm font-bold">الوصف</span>
           <textarea required rows={2} value={editing.description} onChange={(e) => setEditing({ ...editing, description: e.target.value,content_review_status:"unreviewed" })} className="w-full rounded-xl border border-brand-100 px-3 py-2.5 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100" placeholder="وصف مختصر يظهر للعميل" />
         </label>
-        <label className="mt-3 block">
-          <span className="mb-1.5 block text-sm font-bold">رابط صورة المنتج (اختياري)</span>
-          <input dir="ltr" type="url" value={editing.imageUrl ?? ""} onChange={(e) => setEditing({ ...editing, imageUrl: e.target.value })} className="w-full rounded-xl border border-brand-100 px-3 py-2.5 text-left text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100" placeholder="https://…" />
-          <span className="mt-1 block text-xs text-slate-400">لو سيبته فاضي هتظهر أيقونة القسم تلقائيًا.</span>
-        </label>
+        <ProductPhotoField value={editing.imageUrl ?? ""} disabled={busy} onPendingChange={setPhotoPending} onChange={imageUrl=>setEditing(current=>current?{...current,imageUrl,content_review_status:"unreviewed"}:current)}/>
+        <p className="mt-2 text-xs leading-6 text-slate-500">تغيير الصورة يرجع المنتج للمراجعة قبل عرضه، حتى تتأكد من العبوة والتركيز.</p>
         <ProductReviewFields product={editing} onChange={setEditing}/>
         {error && <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{error}</p>}
         <div className="mt-5 flex gap-2">
-          <button type="submit" disabled={busy} className="flex-1 rounded-xl bg-brand-700 py-3 text-sm font-bold text-white hover:bg-brand-800 disabled:opacity-60">{busy ? "جارٍ الحفظ..." : "حفظ المنتج"}</button>
+          <button type="submit" disabled={busy||photoPending} className="flex-1 rounded-xl bg-brand-700 py-3 text-sm font-bold text-white hover:bg-brand-800 disabled:opacity-60">{busy ? "جارٍ الحفظ..." : photoPending ? "أكمل رفع الصورة أو استبعدها" : "حفظ المنتج"}</button>
           <button type="button" onClick={() => setEditing(null)} className="rounded-xl border border-brand-100 px-5 py-3 text-sm font-bold text-slate-600 hover:bg-brand-50">إلغاء</button>
         </div>
       </form>

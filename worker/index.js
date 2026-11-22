@@ -1,4 +1,5 @@
 import {createOrder,notifyRequest,sweep} from './orders.js';
+import {uploadPhoto,servePhoto} from './photos.js';
 const ORIGINS = new Set(['https://one-for-all-good.web.app', 'https://one-for-all-good.firebaseapp.com']);
 const CONTACT = '01018108979';
 const ipWindows = new Map();
@@ -25,8 +26,10 @@ export default {
     const origin = request.headers.get('Origin') || '';
     const path = new URL(request.url).pathname;
     if (path === '/health' && request.method === 'GET') return json({ok:true, service:'store-assistant', ai:!!env.AI}, origin);
+    if (path.startsWith('/media/') && request.method === 'GET') return servePhoto(path.slice(7),env,ctx);
     if (!ORIGINS.has(origin)) return json({error:'origin_not_allowed'}, origin, 403);
     if (request.method === 'OPTIONS') return json({}, origin);
+    if (path === '/photos' && request.method === 'POST') {const result=await uploadPhoto(request,env);return json(result.body,origin,result.status);}
     if (['/orders','/notify'].includes(path) && request.method === 'POST') {try {const result=await (path==='/orders'?createOrder:notifyRequest)(request,env,ctx);return json(result.body,origin,result.status);}catch{return json({error:'service_unavailable'},origin,503);}}
     if (path !== '/chat' || request.method !== 'POST') return json({error:'not_found'}, origin, 404);
     if (!request.headers.get('Content-Type')?.includes('application/json')) return json({error:'json_required'}, origin, 415);

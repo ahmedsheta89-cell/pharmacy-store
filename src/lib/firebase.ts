@@ -109,6 +109,26 @@ async function requestOrderNotification(orderId:string) {
   try {await fetch("https://oneforallgood-assistant.oneforallgood-store.workers.dev/notify",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+await user.getIdToken()},body:JSON.stringify({order_id:orderId})});}catch{}
 }
 
+export async function uploadProductPhoto(blob:Blob, signal?:AbortSignal):Promise<string> {
+  const user=ensure()?.auth.currentUser;
+  if(!user)throw new Error("سجل الدخول بحساب إدارة المتجر أولًا.");
+  if(blob.type!=="image/jpeg"||blob.size>200*1024)throw new Error("الصورة لم تُجهّز بالحجم الصحيح.");
+  const token=await user.getIdToken();
+  if(signal?.aborted)throw new Error("تم إلغاء الرفع.");
+  const controller=new AbortController();const abort=()=>controller.abort();
+  signal?.addEventListener("abort",abort,{once:true});
+  const timer=setTimeout(abort,45000);
+  try{
+    const response=await fetch("https://oneforallgood-assistant.oneforallgood-store.workers.dev/photos",{method:"POST",headers:{"Content-Type":"image/jpeg",Authorization:"Bearer "+token},body:blob,signal:controller.signal});
+    let data:{url?:string;error?:string};
+    try{data=await response.json();}catch{throw new Error("تعذر قراءة نتيجة الرفع. جرّب لاحقًا.");}
+    if(!response.ok)throw new Error(response.status===401||response.status===403?"انتهت جلسة الدخول أو الحساب غير مخوّل. سجل الدخول بحساب المالك.":response.status===429?"تم الوصول لحد الرفع المؤقت. انتظر دقيقة وجرب تاني.":response.status===413?"حجم الصورة أكبر من المسموح.":response.status===400||response.status===415?"الصورة غير صالحة للرفع. اختر نسخة JPG أخرى.":"رفع الصور غير متاح مؤقتًا، وقد يكون حد الخدمة المجانية استُنفد. لم تتغير الصورة السابقة.");
+    if(!data.url||!/^https:\/\/oneforallgood-assistant\.oneforallgood-store\.workers\.dev\/media\/[a-f0-9]{64}$/.test(data.url))throw new Error("نتيجة رفع غير متوقعة. لم تُربط الصورة بالمنتج.");
+    return data.url;
+  }catch(e){if(controller.signal.aborted)throw new Error("توقف الرفع أو انتهت مهلة الاتصال. يمكنك المحاولة مجددًا.");throw e;}
+  finally{clearTimeout(timer);signal?.removeEventListener("abort",abort);}
+}
+
 export function watchOrders(callback: (orders: StoreOrder[]) => void): Unsubscribe | null {
   const ctx = ensure();
   if (!ctx) return null;

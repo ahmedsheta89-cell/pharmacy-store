@@ -21,6 +21,16 @@ export const managerSignOut=async()=>{},managerSignIn=async()=>{};
 export const lookupOrder=async()=>({status:'preparing',total:125,created_at:new Date().toISOString()}),placeOrder=async()=>({ok:true,orderCode:'QA-NOT-REAL'});
 globalThis.__appearanceFixture={set(value){appearance={...appearance,...value};localStorage.setItem('qa-appearance',JSON.stringify(appearance));appearanceListeners.forEach(cb=>cb(appearance));}};
 
+// Synthetic-only photo transport. It never contacts the deployed Worker.
+globalThis.__photoFixture={mode:'success',last:null};
+products[0].imageUrl='/qa/fixtures/product-photo.jpg';
+export const uploadProductPhoto=async(blob,signal)=>{
+  const bitmap=await createImageBitmap(blob);const bytes=new Uint8Array(await blob.arrayBuffer());globalThis.__photoFixture.last={type:blob.type,size:blob.size,width:bitmap.width,height:bitmap.height,metadataStripped:!new TextDecoder().decode(bytes).includes('QA-GEO-MARKER')};bitmap.close();
+  await new Promise(resolve=>setTimeout(resolve,250));
+  if(signal?.aborted)throw new Error('Synthetic cancelled upload');
+  if(globalThis.__photoFixture.mode==='error')throw new Error('وصلت الخدمة المجانية لحد الاستخدام. حاول لاحقًا.');
+  return location.origin+'/qa/fixtures/product-photo.jpg';
+};
 // Never permit a visual fixture to call a production mutation, even accidentally.
 const blocked=async()=>{throw new Error('Visual QA mutation is disabled');};
 export const managerSendPasswordReset=blocked,upsertProduct=blocked,deleteProductById=blocked,seedProducts=blocked,saveBanner=blocked,deleteBanner=blocked,setOrderStatus=blocked,setExpectedDelivery=blocked,submitFeedback=blocked,bulkImportProducts=blocked;
