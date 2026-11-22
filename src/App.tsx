@@ -1,3 +1,4 @@
+import {AppearanceProvider,ThemeSurface} from "./lib/appearance";
 import { useEffect } from "react";
 import { Route, Router, useLocation } from "wouter";
 import { CartProvider } from "./lib/cart";
@@ -14,14 +15,14 @@ function ScrollToTop() {
 
 export default function App() {
   return (
-    <CartProvider>
+    <AppearanceProvider><CartProvider>
       <Router>
-        <ScrollToTop />
+        <ThemeSurface><ScrollToTop />
         <Route path="/product/:id" component={ProductPage} />
         <Route path="/track" component={Tracking} />
         <Route path="/admin" component={Admin} />
         <Route path="/" component={Storefront} />
-      </Router>
-    </CartProvider>
+      </ThemeSurface></Router>
+    </CartProvider></AppearanceProvider>
   );
 }

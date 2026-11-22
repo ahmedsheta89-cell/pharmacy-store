@@ -1,3 +1,4 @@
+import {parseAppearance, isTheme,validSeasons, type StoreAppearance} from "./themes";
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import {
   getFirestore, arrayUnion, runTransaction, collection, getDoc, getDocFromServer, setDoc, deleteDoc, writeBatch, serverTimestamp, query, where, orderBy,
@@ -96,7 +97,7 @@ export async function placeOrder(payload: OrderPayload): Promise<PlaceOrderResul
     sessionStorage.setItem("pending-order",JSON.stringify(pending));
     const response=await fetch("https://oneforallgood-assistant.oneforallgood-store.workers.dev/orders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...payload,request_id:pending.request_id})});
     const result=await response.json();
-    if (!response.ok) throw new Error(result.error==="price_changed"?"سعر منتج اتغير. حدث المتجر وراجع إجمالي السلة قبل التأكيد.":response.status===429?"استنى دقيقة قبل إرسال طلب جديد.":"تعذر إرسال الطلب. راجع البيانات وجرب تاني، أو كلم الصيدلية.");
+    if (!response.ok) throw new Error(result.error==="store_closed"?"استقبال الطلبات متوقف مؤقتًا. حاول لاحقًا.":result.error==="settings_unavailable"?"تعذر التحقق من حالة المتجر. حاول لاحقًا.":result.error==="price_changed"?"سعر منتج اتغير. حدث المتجر وراجع إجمالي السلة قبل التأكيد.":response.status===429?"استنى دقيقة قبل إرسال طلب جديد.":"تعذر إرسال الطلب. راجع البيانات وجرب تاني، أو كلم الصيدلية.");
     sessionStorage.removeItem("pending-order");
     return {ok:true,orderCode:result.orderCode};
   } catch(error) {return {ok:false,reason:"error",message:error instanceof Error?error.message:"تعذر إرسال الطلب"};}
@@ -286,4 +287,16 @@ export async function bulkImportProducts(products:StoreProduct[],onProgress:(sav
  const ctx=ensure();if(!ctx)throw new Error("Firebase غير مهيأ");if(products.length>1000)throw new Error("قسم الملف لأجزاء حتى 1000 منتج");let saved=0;
  try {for(let i=0;i<products.length;i+=200){const batch=writeBatch(ctx.db);for(const p of products.slice(i,i+200)){const {id,...data}=p;batch.set(doc(ctx.db,"products",id),Object.fromEntries(Object.entries({...data,content_review_status:"unreviewed",advertising_status:"unreviewed",prescription_status:"unknown",public_visible:false}).filter(([,v])=>v!==undefined)));}await batch.commit();saved+=Math.min(200,products.length-i);onProgress(saved);}}
  catch {throw new Error(`توقف الاستيراد بعد حفظ ${saved} من ${products.length}. الصفوف المحفوظة مسودات خاصة. راجعها قبل إعادة المحاولة، واستخدم نفس المعرفات لمنع التكرار.`);}
+}
+
+// Public appearance contains no private settings, tokens or customer data.
+export function watchStoreAppearance(callback:(value:StoreAppearance)=>void,onError:()=>void):Unsubscribe|null {
+ const ctx=ensure();if(!ctx){onError();return null;}
+ return onSnapshot(doc(ctx.db,'store_public','appearance'),snap=>callback(parseAppearance(snap.exists()?snap.data():null)),onError);
+}
+export async function saveStoreAppearance(value:StoreAppearance):Promise<void> {
+ const ctx=ensure(),user=ctx?.auth.currentUser;
+ if(!ctx||!user||user.email!=='ahmedsheta89@gmail.com')throw new Error('manager_only');
+ if(!validSeasons(value.seasonal)||!isTheme(value.theme)||typeof value.accepting_orders!=='boolean'||value.closed_message.trim().length>240)throw new Error('invalid_settings');
+ await setDoc(doc(ctx.db,'store_public','appearance'),{...value,closed_message:value.closed_message.trim(),updated_at:serverTimestamp(),updated_by:user.uid});
 }

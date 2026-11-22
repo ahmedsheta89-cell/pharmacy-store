@@ -4,6 +4,31 @@ service cloud.firestore {
     function isManager() {
       return request.auth != null && request.auth.token.email == "ahmedsheta89@gmail.com";
     }
+    function seasonWindow(w) {
+      return w is map && w.keys().hasAll(['enabled','start','end']) && w.keys().hasOnly(['enabled','start','end'])
+        && w.enabled is bool && w.start is string && w.end is string && w.start.size() <= 10 && w.end.size() <= 10
+        && (!w.enabled || (w.start.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') && w.end.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') && w.start <= w.end));
+    }
+    function noOverlap(a,b) { return !a.enabled || !b.enabled || a.end < b.start || b.end < a.start; }
+    function validSeasons(s) {
+      return s is map && s.keys().hasAll(['auto','ramadan','eid_fitr','eid_adha']) && s.keys().hasOnly(['auto','ramadan','eid_fitr','eid_adha'])
+        && s.auto is bool && seasonWindow(s.ramadan) && seasonWindow(s.eid_fitr) && seasonWindow(s.eid_adha)
+        && noOverlap(s.ramadan,s.eid_fitr) && noOverlap(s.ramadan,s.eid_adha) && noOverlap(s.eid_fitr,s.eid_adha);
+    }
+    // Public storefront appearance only. Never put private settings here.
+    match /store_public/appearance {
+      allow get: if true;
+      allow list, delete: if false;
+      allow create, update: if isManager()
+        && request.resource.data.keys().hasAll(['theme','accepting_orders','closed_message','seasonal','updated_at','updated_by'])
+        && request.resource.data.keys().hasOnly(['theme','accepting_orders','closed_message','seasonal','updated_at','updated_by'])
+        && request.resource.data.theme in ['legacy','noir-gold','violet-pop','terracotta-dune','midnight-azure','brutalist-paper','royal-amethyst','ramadan','eid-fitr','eid-adha']
+        && validSeasons(request.resource.data.seasonal)
+        && request.resource.data.accepting_orders is bool
+        && request.resource.data.closed_message is string && request.resource.data.closed_message.size() <= 240
+        && request.resource.data.updated_at == request.time
+        && request.resource.data.updated_by == request.auth.uid;
+    }
     // Private customer records are never readable without manager identity.
     match /orders/{orderId} {
       // Checkout is validated by the free Worker backend using a dedicated service identity.

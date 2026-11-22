@@ -1,3 +1,4 @@
+import {useStoreAppearance} from "../lib/appearance";
 import { useState } from "react";
 import { useCart } from "../lib/cart";
 import { formatPrice } from "../lib/catalog";
@@ -11,6 +12,8 @@ const inputClass =
   "w-full rounded-xl border border-brand-100 bg-white px-3 py-2.5 text-sm text-brand-950 shadow-sm placeholder:text-slate-400 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100";
 
 export default function CartDrawer() {
+  const {appearance,loaded:appearanceLoaded,error:appearanceError}=useStoreAppearance();
+  const accepting=appearanceLoaded&&!appearanceError&&appearance.accepting_orders;
   const { lines, total, setQuantity, remove, clear, open, setOpen } = useCart();
   const [stage, setStage] = useState<Stage>("cart");
   const [orderCode, setOrderCode] = useState("");
@@ -29,6 +32,7 @@ export default function CartDrawer() {
   const submitOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    if(!accepting)return setError(appearanceError?"تعذر التحقق من حالة المتجر.":appearance.closed_message);
     const phone = form.phone.replace(/[\s-]/g, "");
     if (form.name.trim().length < 3) return setError("من فضلك اكتب الاسم بالكامل.");
     if (!/^(\+?20)?0?1[0-9]{9}$/.test(phone)) return setError("رقم الموبايل غير صحيح. اكتب الرقم كاملًا مثل 01012345678.");
@@ -55,7 +59,7 @@ export default function CartDrawer() {
     } else if (result.reason === "not_configured") {
       setError("الطلب المباشر غير مفعّل بعد - اطلب عبر واتساب " + STORE.whatsappDisplay + " وسنؤكد طلبك فورًا.");
     } else {
-      setError("تعذّر إرسال الطلب الآن. جرّب مرة أخرى أو اطلب عبر واتساب.");
+      setError(result.message || "تعذّر إرسال الطلب الآن. جرّب مرة أخرى أو تواصل مع الصيدلية.");
     }
   };
 
@@ -79,6 +83,7 @@ export default function CartDrawer() {
           </button>
         </header>
 
+        {!accepting&&<p role="status" className="m-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{!appearanceLoaded?"جارٍ التحقق من حالة المتجر...":appearanceError?"تعذر التحقق من حالة المتجر.":appearance.closed_message}</p>}
         {stage === "cart" && (
           <>
             <div className="flex-1 overflow-y-auto px-5 py-4">
@@ -127,7 +132,7 @@ export default function CartDrawer() {
                   <span className="font-bold text-brand-950">الإجمالي</span>
                   <span className="text-xl font-black text-brand-950">{formatPrice(total)}</span>
                 </div>
-                <button onClick={() => setStage("checkout")} className="w-full rounded-xl bg-brand-700 py-3.5 text-sm font-bold text-white shadow-md hover:bg-brand-800">
+                <button disabled={!accepting} onClick={() => setStage("checkout")} className="w-full rounded-xl bg-brand-700 py-3.5 text-sm font-bold text-white shadow-md hover:bg-brand-800">
                   إتمام الطلب - الدفع عند الاستلام
                 </button>
               </footer>
@@ -162,7 +167,7 @@ export default function CartDrawer() {
                 <span className="text-lg font-black text-brand-700">{formatPrice(total)}</span>
               </div>
               <p className="text-xs leading-6 text-slate-500">المبلغ المعروض للمنتجات. التوفر وأي تكلفة توصيل بيتأكدوا معاك قبل تنفيذ الطلب. أي دواء يحتاج وصفة بيُراجع مع الصيدلي.</p>
-              <button type="submit" disabled={sending} className="w-full rounded-xl bg-brand-700 py-3.5 text-sm font-bold text-white shadow-md hover:bg-brand-800 disabled:opacity-60">
+              <button type="submit" disabled={sending||!accepting} className="w-full rounded-xl bg-brand-700 py-3.5 text-sm font-bold text-white shadow-md hover:bg-brand-800 disabled:opacity-60">
                 {sending ? "جارٍ إرسال الطلب..." : "تأكيد الطلب"}
               </button>
               <button type="button" onClick={() => setStage("cart")} className="mt-2 w-full rounded-xl py-2.5 text-sm font-semibold text-slate-500 hover:bg-brand-50">
