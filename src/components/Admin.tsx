@@ -11,6 +11,7 @@ import { RESET_REQUEST_ACCEPTED, passwordResetErrorMessage } from "../lib/passwo
 import { STORE } from "../lib/site";
 import CatalogExcel from "./CatalogExcel";
 import ProductReviewFields from "./ProductReviewFields";
+import ProductPhotoField from "./ProductPhotoField";
 import BannersPanel from "./BannersPanel";
 
 import OrderDeliveryPanel, { STATUS_LABEL } from "./OrderDeliveryPanel";
@@ -89,6 +90,8 @@ function ProductsPanel() {
   const [products, setProducts] = useState<StoreProduct[] | null>(null);
   const [editing, setEditing] = useState<StoreProduct | null>(null);
   const [isNew, setIsNew] = useState(false);
+  const [photoPending, setPhotoPending] = useState(false);
+  const [excelBusy, setExcelBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -119,7 +122,7 @@ function ProductsPanel() {
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editing) return;
+    if (!editing || photoPending) return;
     setBusy(true);
     setError("");
     const id = isNew ? `${slugifyId(editing.nameEn || editing.name)}-${crypto.randomUUID().slice(0, 8)}` : editing.id;
@@ -208,15 +211,12 @@ function ProductsPanel() {
           <span className="mb-1.5 block text-sm font-bold">الوصف</span>
           <textarea required rows={2} value={editing.description} onChange={(e) => setEditing({ ...editing, description: e.target.value,content_review_status:"unreviewed" })} className="w-full rounded-xl border border-brand-100 px-3 py-2.5 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100" placeholder="وصف مختصر يظهر للعميل" />
         </label>
-        <label className="mt-3 block">
-          <span className="mb-1.5 block text-sm font-bold">رابط صورة المنتج (اختياري)</span>
-          <input dir="ltr" type="url" value={editing.imageUrl ?? ""} onChange={(e) => setEditing({ ...editing, imageUrl: e.target.value })} className="w-full rounded-xl border border-brand-100 px-3 py-2.5 text-left text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100" placeholder="https://…" />
-          <span className="mt-1 block text-xs text-slate-400">لو سيبته فاضي هتظهر أيقونة القسم تلقائيًا.</span>
-        </label>
+        <ProductPhotoField value={editing.imageUrl ?? ""} disabled={busy} onPendingChange={setPhotoPending} onChange={imageUrl=>setEditing(current=>current?{...current,imageUrl,content_review_status:"unreviewed"}:current)}/>
+        <p className="mt-2 text-xs leading-6 text-slate-500">تغيير الصورة يرجع المنتج للمراجعة قبل عرضه، حتى تتأكد من العبوة والتركيز.</p>
         <ProductReviewFields product={editing} onChange={setEditing}/>
         {error && <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{error}</p>}
         <div className="mt-5 flex gap-2">
-          <button type="submit" disabled={busy} className="flex-1 rounded-xl bg-brand-700 py-3 text-sm font-bold text-white hover:bg-brand-800 disabled:opacity-60">{busy ? "جارٍ الحفظ..." : "حفظ المنتج"}</button>
+          <button type="submit" disabled={busy||photoPending} className="flex-1 rounded-xl bg-brand-700 py-3 text-sm font-bold text-white hover:bg-brand-800 disabled:opacity-60">{busy ? "جارٍ الحفظ..." : photoPending ? "أكمل رفع الصورة أو استبعدها" : "حفظ المنتج"}</button>
           <button type="button" onClick={() => setEditing(null)} className="rounded-xl border border-brand-100 px-5 py-3 text-sm font-bold text-slate-600 hover:bg-brand-50">إلغاء</button>
         </div>
       </form>
@@ -227,12 +227,12 @@ function ProductsPanel() {
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-bold text-slate-600">عدد المنتجات: {products.length} · الظاهر للعملاء: {products.filter(p=>p.public_visible&&p.owner_hidden!==true&&eligibleForDisplay(p)).length}</p>
-        <button onClick={startAdd} className="rounded-xl bg-brand-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-800">+ إضافة منتج</button>
+        <button disabled={busy||excelBusy} onClick={startAdd} className="rounded-xl bg-brand-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-800 disabled:opacity-50">+ إضافة منتج</button>
       </div>
       {error && <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{error}</p>}
       <p className="mb-3 text-sm leading-7 text-slate-600">تحكم في ظهور كل منتج من زر إظهار / إخفاء. الإخفاء لا يحذف المنتج. الإظهار يلغي الإخفاء اليدوي فقط؛ الظهور للعملاء يحتاج أيضًا اعتماد المراجعة والسماح بالإعلان وتصنيف المنتج.</p>
       {notice && <p role="status" className="mb-3 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
-      <CatalogExcel products={products}/>
+      <CatalogExcel products={products} onBusyChange={setExcelBusy}/>
       {products.length === 0 ? (
         <div className="rounded-2xl border border-brand-100 bg-white p-10 text-center">
           <p className="font-black text-brand-950">لا توجد منتجات في قاعدة البيانات بعد</p>
@@ -249,9 +249,9 @@ function ProductsPanel() {
                 {!eligibleForDisplay(product)&&<p className="mt-1 text-xs leading-6 text-amber-800">قبل الإظهار: اعتمد المراجعة والسماح بالإعلان، وحدد تصنيف المنتج من «تعديل».</p>}
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
-                <button type="button" disabled={busy||toggling!==null} onClick={()=>void toggle(product)} aria-label={`${product.owner_hidden===true?"إظهار":"إخفاء"} ${product.name}`} title={!eligibleForDisplay(product)?"يمكن تغيير الإخفاء اليدوي. النشر للعملاء ينتظر اعتماد المنتج.":undefined} className={`min-w-20 rounded-xl border px-3.5 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50 ${product.owner_hidden!==true?"border-amber-200 bg-amber-50 text-amber-900":"border-emerald-200 bg-emerald-50 text-emerald-800"}`}>{toggling===product.id?"جارٍ الحفظ...":product.owner_hidden===true?"إظهار":"إخفاء"}</button>
-                <button disabled={busy||toggling!==null} onClick={() => startEdit(product)} className="rounded-xl border border-brand-100 px-3.5 py-2 text-xs font-bold text-brand-700 hover:bg-brand-50 disabled:opacity-50">تعديل</button>
-                <button onClick={() => void remove(product)} disabled={busy||toggling!==null} className="rounded-xl border border-red-200 px-3.5 py-2 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-60">حذف</button>
+                <button type="button" disabled={busy||excelBusy||toggling!==null} onClick={()=>void toggle(product)} aria-label={`${product.owner_hidden===true?"إظهار":"إخفاء"} ${product.name}`} title={!eligibleForDisplay(product)?"يمكن تغيير الإخفاء اليدوي. النشر للعملاء ينتظر اعتماد المنتج.":undefined} className={`min-w-20 rounded-xl border px-3.5 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50 ${product.owner_hidden!==true?"border-amber-200 bg-amber-50 text-amber-900":"border-emerald-200 bg-emerald-50 text-emerald-800"}`}>{toggling===product.id?"جارٍ الحفظ...":product.owner_hidden===true?"إظهار":"إخفاء"}</button>
+                <button disabled={busy||excelBusy||toggling!==null} onClick={() => startEdit(product)} className="rounded-xl border border-brand-100 px-3.5 py-2 text-xs font-bold text-brand-700 hover:bg-brand-50 disabled:opacity-50">تعديل</button>
+                <button onClick={() => void remove(product)} disabled={busy||excelBusy||toggling!==null} className="rounded-xl border border-red-200 px-3.5 py-2 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-60">حذف</button>
               </div>
             </article>
           ))}

@@ -27,11 +27,25 @@
         "limit": 3,
         "period": 60
       }
+    },
+    {
+      "name": "PHOTO_LIMITER",
+      "namespace_id": "1003",
+      "simple": {
+        "limit": 20,
+        "period": 60
+      }
     }
   ],
   "triggers": {
     "crons": [
       "*/10 * * * *"
     ]
-  }
+  },
+  "kv_namespaces": [
+    {
+      "binding": "PRODUCT_PHOTOS",
+      "id": "799d6a2e03c0480bbecf5b1322e8d803"
+    }
+  ]
 }

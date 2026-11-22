@@ -1,4 +1,5 @@
 import {reviewIssues} from "./productReview";
+import {isStoredProductPhotoUrl,productPhotoIdentity} from "./productPhotoMatching";
 import {derivedVisibility, eligibleForDisplay, importVisibility} from "./productVisibility";
 import {parseAppearance, isTheme,validSeasons, type StoreAppearance} from "./themes";
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
@@ -109,6 +110,26 @@ async function requestOrderNotification(orderId:string) {
   try {await fetch("https://oneforallgood-assistant.oneforallgood-store.workers.dev/notify",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+await user.getIdToken()},body:JSON.stringify({order_id:orderId})});}catch{}
 }
 
+export async function uploadProductPhoto(blob:Blob, signal?:AbortSignal):Promise<string> {
+  const user=ensure()?.auth.currentUser;
+  if(!user)throw new Error("سجل الدخول بحساب إدارة المتجر أولًا.");
+  if(blob.type!=="image/jpeg"||blob.size>200*1024)throw new Error("الصورة لم تُجهّز بالحجم الصحيح.");
+  const token=await user.getIdToken();
+  if(signal?.aborted)throw new Error("تم إلغاء الرفع.");
+  const controller=new AbortController();const abort=()=>controller.abort();
+  signal?.addEventListener("abort",abort,{once:true});
+  const timer=setTimeout(abort,45000);
+  try{
+    const response=await fetch("https://oneforallgood-assistant.oneforallgood-store.workers.dev/photos",{method:"POST",headers:{"Content-Type":"image/jpeg",Authorization:"Bearer "+token},body:blob,signal:controller.signal});
+    let data:{url?:string;error?:string};
+    try{data=await response.json();}catch{throw new Error("تعذر قراءة نتيجة الرفع. جرّب لاحقًا.");}
+    if(!response.ok)throw new Error(response.status===401||response.status===403?"انتهت جلسة الدخول أو الحساب غير مخوّل. سجل الدخول بحساب المالك.":response.status===429?"تم الوصول لحد الرفع المؤقت. انتظر دقيقة وجرب تاني.":response.status===413?"حجم الصورة أكبر من المسموح.":response.status===400||response.status===415?"الصورة غير صالحة للرفع. اختر نسخة JPG أخرى.":"رفع الصور غير متاح مؤقتًا، وقد يكون حد الخدمة المجانية استُنفد. لم تتغير الصورة السابقة.");
+    if(!data.url||!/^https:\/\/oneforallgood-assistant\.oneforallgood-store\.workers\.dev\/media\/[a-f0-9]{64}$/.test(data.url))throw new Error("نتيجة رفع غير متوقعة. لم تُربط الصورة بالمنتج.");
+    return data.url;
+  }catch(e){if(controller.signal.aborted)throw new Error("توقف الرفع أو انتهت مهلة الاتصال. يمكنك المحاولة مجددًا.");throw e;}
+  finally{clearTimeout(timer);signal?.removeEventListener("abort",abort);}
+}
+
 export function watchOrders(callback: (orders: StoreOrder[]) => void): Unsubscribe | null {
   const ctx = ensure();
   if (!ctx) return null;
@@ -176,6 +197,7 @@ export type StoreProduct = {
   badge?: string;
   description: string;
   imageUrl?: string;
+  image_revision?: string;
   dosage_information?: string;
   usage_instructions?: string;
   warnings?: string;
@@ -197,14 +219,19 @@ export function watchProducts(callback: (products: StoreProduct[]) => void, mana
   if (!ctx) return null;
   const q = manager ? query(collection(ctx.db, "products"), orderBy("name")) : query(collection(ctx.db,"products"),where("public_visible","==",true));
   return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<StoreProduct, "id">) })).filter(p=>manager || (p.public_visible===true && derivedVisibility(p))).sort((a,b)=>a.name.localeCompare(b.name,"ar")));
+    callback(snap.docs.map((d) => ({ ...(d.data() as Omit<StoreProduct, "id">), id: d.id })).filter(p=>manager || (p.public_visible===true && derivedVisibility(p))).sort((a,b)=>a.name.localeCompare(b.name,"ar")));
   });
 }
 
 
 export async function getPublicProduct(id:string):Promise<StoreProduct|null>{
  const ctx=ensure();if(!ctx||!/^[a-zA-Z0-9_-]{1,100}$/.test(id))return null;
- const d=await getDocFromServer(doc(ctx.db,"products",id));if(!d.exists()||d.data().public_visible!==true||!derivedVisibility(d.data()))return null;return {id:d.id,...d.data()} as StoreProduct;
+ const d=await getDocFromServer(doc(ctx.db,"products",id));if(!d.exists()||d.data().public_visible!==true||!derivedVisibility(d.data()))return null;return {...d.data(),id:d.id} as StoreProduct;
+}
+
+function photoRevision(current:{imageUrl?:unknown;image_revision?:unknown}|undefined,imageUrl?:string):string|undefined{
+ if(!current||String(current.imageUrl||"").trim()!==(imageUrl||"").trim())return crypto.randomUUID();
+ return typeof current.image_revision==="string"?current.image_revision:undefined;
 }
 
 export async function upsertProduct(product: StoreProduct): Promise<void> {
@@ -219,7 +246,11 @@ export async function upsertProduct(product: StoreProduct): Promise<void> {
   await runTransaction(ctx.db,async tx=>{
     const current=await tx.get(ref);
     const owner_hidden=current.exists()?current.data().owner_hidden===true:product.owner_hidden===true;
-    const {id,...data}={...product,owner_hidden,public_visible:derivedVisibility({...product,owner_hidden})};
+    // Reject an old editor even when another edit restored the same URL. Its
+    // review flags must not silently reapprove a newer image revision.
+    if(current.exists()&&String(current.data().image_revision||"")!==(product.image_revision||""))throw new Error("صورة الصنف اتغيرت في جلسة أخرى. حدّث المنتج قبل الحفظ حتى لا نستبدل صورة أحدث.");
+    const image_revision=photoRevision(current.exists()?current.data():undefined,product.imageUrl);
+    const {id,...data}={...product,image_revision,owner_hidden,public_visible:derivedVisibility({...product,owner_hidden})};
     tx.set(ref,Object.fromEntries(Object.entries(data).filter(([,value])=>value!==undefined)));
   });
 }
@@ -232,6 +263,23 @@ export async function setProductHidden(id:string,hidden:boolean):Promise<void>{
   const snap=await tx.get(ref);if(!snap.exists())throw new Error("المنتج لم يعد موجودًا");
   const current=snap.data();
   tx.update(ref,{owner_hidden:hidden,public_visible:derivedVisibility({...current,owner_hidden:hidden})});
+ });
+}
+
+// Image-only writes preserve concurrent price/content/hide edits and reject a
+// stale image or changed pack identity rather than overwriting newer work.
+export async function assignProductPhoto(input:{productId:string;imageUrl:string;expectedImageUrl:string;expectedIdentity:string;expectedImageRevision?:string}):Promise<void>{
+ const ctx=ensure();if(!ctx)throw new Error("Firebase غير مهيأ");
+ if(!/^[a-zA-Z0-9_-]{1,100}$/.test(input.productId)||!isStoredProductPhotoUrl(input.imageUrl))throw new Error("بيانات ربط الصورة غير صحيحة");
+ const ref=doc(ctx.db,"products",input.productId);
+ await runTransaction(ctx.db,async tx=>{
+  const snap=await tx.get(ref);if(!snap.exists())throw new Error("المنتج لم يعد موجودًا. راجع اختيار الصورة.");
+  const current=snap.data();
+  if(productPhotoIdentity({...current,id:snap.id})!==input.expectedIdentity)throw new Error("اسم المنتج أو بيانات العبوة اتغيرت. حدّث القائمة وراجع اختيار الصورة.");
+  const currentUrl=String(current.imageUrl||"").trim();
+  if(currentUrl===input.imageUrl)return; // A retry must not undo a later review.
+  if(currentUrl!==input.expectedImageUrl.trim()||String(current.image_revision||"")!==(input.expectedImageRevision||""))throw new Error("صورة المنتج اتغيرت أثناء المراجعة. حدّث القائمة وراجع الاستبدال.");
+  tx.update(ref,{imageUrl:input.imageUrl,image_revision:crypto.randomUUID(),content_review_status:"unreviewed",public_visible:false});
  });
 }
 
@@ -304,7 +352,7 @@ export async function bulkImportProducts(products:StoreProduct[],onProgress:(sav
   const chunk=products.slice(i,i+200),refs=chunk.map(p=>doc(ctx.db,"products",p.id));
   await runTransaction(ctx.db,async tx=>{
    const current=await Promise.all(refs.map(ref=>tx.get(ref)));
-   chunk.forEach((p,n)=>{const {id,...data}=p;tx.set(refs[n],Object.fromEntries(Object.entries({...data,...importVisibility(current[n].exists()?current[n].data():undefined)}).filter(([,v])=>v!==undefined)));});
+   chunk.forEach((p,n)=>{const {id,...data}=p;tx.set(refs[n],Object.fromEntries(Object.entries({...data,...importVisibility(current[n].exists()?current[n].data():undefined),image_revision:photoRevision(current[n].exists()?current[n].data():undefined,p.imageUrl)}).filter(([,v])=>v!==undefined)));});
   });
   saved+=chunk.length;onProgress(saved);
  }}

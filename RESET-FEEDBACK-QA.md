@@ -1,6 +1,6 @@
 # Password-reset feedback fix, review candidate
 
-Status: local only. Not pushed or deployed.
+The verification below was completed before release. This fix was deployed through PR #20 on November 22, 2026 and is retained in the photo release.
 
 ## Change
 
@@ -29,4 +29,4 @@ The browser test expects Google Chrome at `/opt/google/chrome/chrome` and Playwr
 
 ## Release limits
 
-This fixes feedback only. It does not prove delivery of any particular email, change Firebase quotas, add logging, change a password or resolve address aliases. Keep deployment held for review. No photo or publication-workflow changes are included.
+This fixes feedback only. It does not prove delivery of any particular email, change Firebase quotas, add logging, change a password or resolve address aliases. The original reset-only patch included no photo or publication-workflow changes. Later photo work retains this feedback behavior.

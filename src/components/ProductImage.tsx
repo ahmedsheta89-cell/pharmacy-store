@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const CATEGORY_ART: Record<string, { bg: string; accent: string; glyph: string }> = {
   medicine: { bg: "#d7efe4", accent: "#1c6e56", glyph: "M9 3a5 5 0 0 1 7.07 0l4.9 4.9a5 5 0 0 1-7.07 7.07l-4.9-4.9A5 5 0 0 1 9 3Zm1.4 1.42a3 3 0 0 0 0 4.24l2.48 2.48 4.24-4.24-2.48-2.48a3 3 0 0 0-4.24 0ZM3 15l4 4m-5 1a2 2 0 1 0 4 0 2 2 0 0 0-4 0Z" },
@@ -14,10 +14,11 @@ const CATEGORY_ART: Record<string, { bg: string; accent: string; glyph: string }
 export default function ProductImage({ category, name, imageUrl }: { category: string; name: string; imageUrl?: string }) {
   const art = CATEGORY_ART[category] ?? CATEGORY_ART.medicine;
   const [imgFailed, setImgFailed] = useState(false);
+  useEffect(()=>setImgFailed(false),[imageUrl]);
   if (imageUrl && !imgFailed) {
     return (
       <div className="store-product-art relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-t-2xl bg-white">
-        <img src={imageUrl} alt={name} loading="lazy" onError={() => setImgFailed(true)} className="size-full object-cover" />
+        <img src={imageUrl} alt={name} loading="lazy" onError={() => setImgFailed(true)} className="size-full object-contain p-4" />
       </div>
     );
   }
