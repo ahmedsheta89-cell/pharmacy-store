@@ -65,7 +65,7 @@ export type StoreOrder = OrderPayload & {
 
 export type PlaceOrderResult =
   | { ok: true; orderCode: string }
-  | { ok: false; reason: "not_configured" | "error"; message?: string };
+  | { ok: false; reason: "not_configured" | "error" | "catalog_changed"; message?: string };
 
 export function normalizePhone(value: string): string {
   return value.replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/[^0-9]/g, "").replace(/^(0020|20)/, "").replace(/^0/, "");
@@ -100,6 +100,7 @@ export async function placeOrder(payload: OrderPayload): Promise<PlaceOrderResul
     sessionStorage.setItem("pending-order",JSON.stringify(pending));
     const response=await fetch("https://oneforallgood-assistant.oneforallgood-store.workers.dev/orders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...payload,request_id:pending.request_id})});
     const result=await response.json();
+    if (!response.ok && ["product_unavailable", "catalog_changed", "price_changed"].includes(result.error)) return {ok:false,reason:"catalog_changed",message:"السعر أو التوفر اتغير. راجع السلة المحدثة قبل التأكيد."};
     if (!response.ok) throw new Error(result.error==="store_closed"?"استقبال الطلبات متوقف مؤقتًا. حاول لاحقًا.":result.error==="settings_unavailable"?"تعذر التحقق من حالة المتجر. حاول لاحقًا.":result.error==="product_unavailable"||result.error==="catalog_changed"?"منتج في السلة لم يعد متاحًا أو اتغير. حدث المتجر وراجع السلة قبل التأكيد.":result.error==="price_changed"?"سعر منتج اتغير. حدث المتجر وراجع إجمالي السلة قبل التأكيد.":response.status===429?"استنى دقيقة قبل إرسال طلب جديد.":"تعذر إرسال الطلب. راجع البيانات وجرب تاني، أو كلم الصيدلية.");
     sessionStorage.removeItem("pending-order");
     return {ok:true,orderCode:result.orderCode};

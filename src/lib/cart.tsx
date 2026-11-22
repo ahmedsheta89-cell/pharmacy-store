@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { cartTotal } from "./cartReconciliation";
 import type { Product } from "./catalog";
 
 export type CartLine = { product: Product; quantity: number };
@@ -10,6 +11,7 @@ type CartContextValue = {
   add: (product: Product) => void;
   remove: (productId: string) => void;
   setQuantity: (productId: string, quantity: number) => void;
+  replaceLines: (lines: CartLine[]) => void;
   clear: () => void;
   open: boolean;
   setOpen: (open: boolean) => void;
@@ -39,7 +41,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<CartContextValue>(() => {
     const count = lines.reduce((sum, line) => sum + line.quantity, 0);
-    const total = lines.reduce((sum, line) => sum + line.quantity * line.product.price, 0);
+    const total = cartTotal(lines);
     return {
       lines,
       count,
@@ -61,6 +63,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
             ? prev.filter((line) => line.product.id !== productId)
             : prev.map((line) => (line.product.id === productId ? { ...line, quantity: Math.min(quantity, 20) } : line))
         ),
+      replaceLines: setLines,
       clear: () => setLines([]),
       open,
       setOpen,

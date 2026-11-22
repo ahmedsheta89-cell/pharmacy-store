@@ -14,13 +14,14 @@ import {derivedVisibility,eligibleForDisplay} from '/src/lib/productVisibility.t
 products[1].owner_hidden=true;products[1].public_visible=false;products[2].content_review_status='unreviewed';products[2].public_visible=false;
 const productListeners=new Set();
 export const watchProducts=(cb,manager=false)=>{const notify=()=>cb(manager?[...products]:products.filter(p=>p.public_visible&&derivedVisibility(p)));productListeners.add(notify);queueMicrotask(notify);return ()=>productListeners.delete(notify);};
-export const getPublicProduct=async id=>products.find(p=>p.id===id&&p.public_visible&&derivedVisibility(p))||null;
+globalThis.__cartReadFixture={mode:'normal',delay:0,calls:[]};
+export const getPublicProduct=async id=>{const state=globalThis.__cartReadFixture;state.calls.push(id);if(state.delay)await new Promise(resolve=>setTimeout(resolve,state.delay));if(state.mode==='offline')throw Object.assign(new Error('Synthetic offline'),{code:'unavailable'});if(state.mode==='denied')throw Object.assign(new Error('Synthetic hidden'),{code:'permission-denied'});return structuredClone(products.find(p=>p.id===id&&p.public_visible&&derivedVisibility(p))||null);};
 export const setProductHidden=async(id,hidden)=>{const p=products.find(p=>p.id===id);p.owner_hidden=hidden;p.public_visible=derivedVisibility(p);productListeners.forEach(cb=>cb());};
 export const watchOrders=cb=>emit(cb,[]),watchFeedback=cb=>emit(cb,[]),watchBanners=cb=>emit(cb,[{id:'qa-banner',title:'مساحة إعلان من الصيدلية',text:'بانر تجريبي للمعاينة فقط. تضيف الصورة والنص والرابط وتوقف ظهوره من لوحة الإدارة.',enabled:true,linkUrl:'/#catalog',linkLabel:'شوف المنتجات التجريبية'}]);
 export const managerSignOut=async()=>{},managerSignIn=async()=>{};
 export const lookupOrder=async()=>({status:'preparing',total:125,created_at:new Date().toISOString()});
-globalThis.__checkoutFixture={orders:[]};
-export const placeOrder=async payload=>{globalThis.__checkoutFixture.orders.push(structuredClone(payload));return {ok:true,orderCode:'QA-NOT-REAL'};};
+globalThis.__checkoutFixture={orders:[],mode:'success'};
+export const placeOrder=async payload=>{globalThis.__checkoutFixture.orders.push(structuredClone(payload));if(globalThis.__checkoutFixture.mode==='price_changed'){globalThis.__checkoutFixture.mode='success';products.find(p=>p.id===payload.items[0].product_id).price+=10;return {ok:false,reason:'catalog_changed',message:'السعر أو التوفر اتغير. راجع السلة المحدثة قبل التأكيد.'};}return {ok:true,orderCode:'QA-NOT-REAL'};};
 globalThis.__appearanceFixture={set(value){appearance={...appearance,...value};localStorage.setItem('qa-appearance',JSON.stringify(appearance));appearanceListeners.forEach(cb=>cb(appearance));}};
 
 // Synthetic-only photo transport. It never contacts the deployed Worker.
