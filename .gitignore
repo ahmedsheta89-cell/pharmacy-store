@@ -4,3 +4,6 @@ dist
 *.local
 
 *-debug.log
+
+.firebase/
+qa/.product-test-runtime.mjs

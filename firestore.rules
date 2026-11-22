@@ -39,7 +39,13 @@ service cloud.firestore {
     // Product catalog: readable by every visitor, writable only by the signed-in manager.
     match /products/{productId} {
       allow read: if isManager() || resource.data.public_visible == true;
-      allow write: if isManager();
+      allow create, update: if isManager() &&
+        (!("owner_hidden" in request.resource.data) || request.resource.data.owner_hidden is bool) &&
+        (request.resource.data.public_visible != true || (
+          (!("owner_hidden" in request.resource.data) || request.resource.data.owner_hidden == false) &&
+          request.resource.data.content_review_status == 'reviewed' && request.resource.data.advertising_status == 'approved' &&
+          request.resource.data.prescription_status in ['non_prescription','not_medicine']));
+      allow delete: if isManager();
     }
 
     // Only a minimal status record is public. Its SHA-256 document key requires

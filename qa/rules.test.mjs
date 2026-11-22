@@ -23,3 +23,20 @@ test('REST commit rejects a stale appearance guard without writing order or trac
  const r=await call(':commit','POST',{writes:[{update:{name:root+'orders/qa-race',fields:{code:{stringValue:'NOT-REAL'}}},currentDocument:{exists:false}},{update:{name:root+'tracking/qa-race',fields:{status:{stringValue:'new'}}},currentDocument:{exists:false}},{verify:root+'store_public/appearance',currentDocument:{updateTime:snapshot.updateTime}}]});
  const rejection=await r.json();assert.equal(rejection.error.status,'FAILED_PRECONDITION');assert.ok(!r.ok);assert.equal((await call('/orders/qa-race')).status,404);assert.equal((await call('/tracking/qa-race')).status,404);
 });
+test('rules prohibit forged show with owner-hidden or missing approvals, including manager writes',async()=>{
+ const ref=doc(owner,'products','qa-rules-product');const approved={name:'Synthetic rule fixture',public_visible:true,content_review_status:'reviewed',advertising_status:'approved',prescription_status:'not_medicine'};
+ await assertSucceeds(setDoc(ref,approved));
+ for(const change of [{owner_hidden:true},{owner_hidden:'false'},{content_review_status:'unreviewed'},{advertising_status:'blocked'},{prescription_status:'prescription'}])await assertFails(setDoc(ref,{...approved,...change}));
+ await assertSucceeds(setDoc(ref,{...approved,owner_hidden:true,public_visible:false}));await assertFails(getDoc(doc(anon,'products','qa-rules-product')));
+ await assertFails(setDoc(doc(anon,'products','qa-rules-product'),approved));
+ await assertFails(setDoc(doc(other,'products','qa-rules-product'),approved));
+});
+test('REST commit rejects product hide racing checkout, with no order/tracking writes',async()=>{
+ const base='http://127.0.0.1:8086/v1/projects/demo-theme-check/databases/(default)/documents';
+ const call=async(path,method='GET',body)=>fetch(base+path,{method,headers:{Authorization:'Bearer owner','Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+ const ref=doc(owner,'products','qa-hide-race');await setDoc(ref,{name:'Synthetic race fixture',public_visible:true,content_review_status:'reviewed',advertising_status:'approved',prescription_status:'not_medicine'});
+ const snapshot=await (await call('/products/qa-hide-race')).json();await setDoc(ref,{public_visible:false,owner_hidden:true});
+ const root='projects/demo-theme-check/databases/(default)/documents/';
+ const r=await call(':commit','POST',{writes:[{update:{name:root+'orders/qa-hide-race',fields:{code:{stringValue:'NOT-REAL'}}},currentDocument:{exists:false}},{update:{name:root+'tracking/qa-hide-race',fields:{status:{stringValue:'new'}}},currentDocument:{exists:false}},{verify:root+'products/qa-hide-race',currentDocument:{updateTime:snapshot.updateTime}}]});
+ assert.equal((await r.json()).error.status,'FAILED_PRECONDITION');assert.equal((await call('/orders/qa-hide-race')).status,404);assert.equal((await call('/tracking/qa-hide-race')).status,404);
+});
