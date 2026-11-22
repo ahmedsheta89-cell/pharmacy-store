@@ -1,10 +1,10 @@
 # Storefront themes review
 
-Source-only review branch. No deployment or production appearance-document write is part of this change.
+Live rollout approved by the owner on 22 November 2026. Hosting, rules and Worker deployed. No production appearance-document write made; legacy green/white remains initial fallback.
 
 ## Behavior
 
-- Six canonical design presets plus Ramadan, Eid al-Fitr and Eid al-Adha share storefront components and semantic CSS variables. Royal Amethyst is the source default. Admin remains neutral.
+- Six canonical design presets plus Ramadan, Eid al-Fitr and Eid al-Adha share storefront components and semantic CSS variables. The existing legacy green/white look is preserved as the source default; Royal Amethyst remains available. Admin remains neutral.
 - Owner appearance controls persist one exact-schema `store_public/appearance` document. Public single-document get only; no public list/write. Existing legacy manager rule is unchanged.
 - Date windows use Cairo calendar dates with inclusive endpoints, no overlap, no yearly recurrence. Automatic mode starts OFF and dates are blank. Dates must be reviewed, not guessed from fixed Gregorian dates.
 - Manual preset selection can choose any of the nine. Automatic mode overrides within enabled reviewed windows and restores manual selection outside them. Active browser pages check their Cairo day every 30 seconds and on focus/visibility. This is cosmetic scheduling, not a server scheduler. It depends on the device clock.
@@ -34,8 +34,8 @@ node qa/visual.cjs
 
 18 pure/backend/emulator tests passed. Visual checks cover nine presets at 320/390/1280/1440 widths, no horizontal overflow, admin save, cross-tab updates, closed product/checkout. Browser errors empty. Worker dry-run: 27.33 KiB / 7.67 KiB gzip.
 
-## Gates before production
+## Rollout checks
 
-User reviews visual gallery and approves deployment. Reconcile current main and unmerged POS/CRM branches independently. Verify Firebase deployment identity and current Spark-only status. Deploy rules/Worker/frontend in a controlled change, then test real owner authorization, appearance persistence and closure against production without leaving QA orders. Do not enable automatic dates without reviewed windows. Never enable paid hosting, Blaze, billing or a card.
+Owner approved live rollout via WhatsApp voice note at 05:04 Cairo. Firebase Spark and Workers Free verified before deployment. POS/CRM excluded. Live authenticated admin and all ten view URLs verified without fake orders or appearance writes. Persistence/closure semantics passed emulator and synthetic cross-tab tests; no global closure was applied to production just for QA. Do not enable automatic dates without reviewed windows. Never enable paid hosting, Blaze, billing or a card.
 
 Existing main JavaScript and Excel import chunks remain above Vite's 500KB warning threshold. Code splitting is a separate optimization, not hidden by this change.
