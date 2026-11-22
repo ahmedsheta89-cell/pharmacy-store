@@ -18,7 +18,9 @@ export const getPublicProduct=async id=>products.find(p=>p.id===id&&p.public_vis
 export const setProductHidden=async(id,hidden)=>{const p=products.find(p=>p.id===id);p.owner_hidden=hidden;p.public_visible=derivedVisibility(p);productListeners.forEach(cb=>cb());};
 export const watchOrders=cb=>emit(cb,[]),watchFeedback=cb=>emit(cb,[]),watchBanners=cb=>emit(cb,[{id:'qa-banner',title:'مساحة إعلان من الصيدلية',text:'بانر تجريبي للمعاينة فقط. تضيف الصورة والنص والرابط وتوقف ظهوره من لوحة الإدارة.',enabled:true,linkUrl:'/#catalog',linkLabel:'شوف المنتجات التجريبية'}]);
 export const managerSignOut=async()=>{},managerSignIn=async()=>{};
-export const lookupOrder=async()=>({status:'preparing',total:125,created_at:new Date().toISOString()}),placeOrder=async()=>({ok:true,orderCode:'QA-NOT-REAL'});
+export const lookupOrder=async()=>({status:'preparing',total:125,created_at:new Date().toISOString()});
+globalThis.__checkoutFixture={orders:[]};
+export const placeOrder=async payload=>{globalThis.__checkoutFixture.orders.push(structuredClone(payload));return {ok:true,orderCode:'QA-NOT-REAL'};};
 globalThis.__appearanceFixture={set(value){appearance={...appearance,...value};localStorage.setItem('qa-appearance',JSON.stringify(appearance));appearanceListeners.forEach(cb=>cb(appearance));}};
 
 // Synthetic-only photo transport. It never contacts the deployed Worker.
