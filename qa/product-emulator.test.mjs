@@ -19,13 +19,18 @@ test('actual product data layer toggles only visibility and preserves all busine
 test('saving a stale edit cannot undo a hide; approving a manually hidden record keeps it hidden',async()=>{
  await runtime.setProductHidden(approved.id,true);
  await runtime.upsertProduct({...approved,owner_hidden:false,price:26});let p=await current();assert.equal(p.owner_hidden,true);assert.equal(p.public_visible,false);assert.equal(p.price,26);
- await runtime.upsertProduct({...approved,content_review_status:'unreviewed'});await assert.rejects(runtime.setProductHidden(approved.id,false));
+ await runtime.upsertProduct({...approved,content_review_status:'unreviewed'});await runtime.setProductHidden(approved.id,false);assert.equal((await current()).public_visible,false);await runtime.setProductHidden(approved.id,true);
  await runtime.upsertProduct(approved);p=await current();assert.equal(p.owner_hidden,true);assert.equal(p.public_visible,false);
 });
 test('actual XLSX update preserves live hide regardless of stale spreadsheet state; resets approvals',async()=>{
  let saved=0;await runtime.bulkImportProducts([{...approved,owner_hidden:false}],n=>saved=n);assert.equal(saved,1);const p=await current();assert.equal(p.owner_hidden,true);assert.equal(p.public_visible,false);assert.equal(p.content_review_status,'unreviewed');assert.equal(p.advertising_status,'unreviewed');assert.equal(p.prescription_status,'unknown');
- await assert.rejects(runtime.setProductHidden(approved.id,false));
+ await runtime.setProductHidden(approved.id,false);assert.equal((await current()).public_visible,false);await runtime.setProductHidden(approved.id,true);
  await runtime.upsertProduct(approved);assert.equal((await current()).public_visible,false);await runtime.setProductHidden(approved.id,false);assert.equal((await current()).public_visible,true);
 });
 test('XLSX new rows cannot import approvals or a forged visibility flag',async()=>{await runtime.bulkImportProducts([{...approved,id:'qa-new-import',public_visible:true,owner_hidden:true}],()=>{});const p=(await getDoc(doc(db,'products','qa-new-import'))).data();assert.equal(p.public_visible,false);assert.equal(p.owner_hidden,false);assert.equal(p.content_review_status,'unreviewed');});
+test('actual legacy document with no visibility or approval fields supports both toggles without publishing',async()=>{
+ const ref=doc(db,'products','qa-legacy');const seed=await fetch('http://127.0.0.1:8086/v1/projects/demo-theme-check/databases/(default)/documents/products/qa-legacy',{method:'PATCH',headers:{Authorization:'Bearer owner','Content-Type':'application/json'},body:JSON.stringify({fields:{name:{stringValue:'Legacy fixture only'},price:{integerValue:'5'}}})});assert.ok(seed.ok);
+ await runtime.setProductHidden('qa-legacy',true);assert.deepEqual((await getDoc(ref)).data(),{name:'Legacy fixture only',price:5,owner_hidden:true,public_visible:false});
+ await runtime.setProductHidden('qa-legacy',false);assert.deepEqual((await getDoc(ref)).data(),{name:'Legacy fixture only',price:5,owner_hidden:false,public_visible:false});await deleteDoc(ref);
+});
 test.after(async()=>{await deleteDoc(doc(db,'products',approved.id));await deleteDoc(doc(db,'products','qa-new-import'));await deleteApp(app);await unlink(file);});

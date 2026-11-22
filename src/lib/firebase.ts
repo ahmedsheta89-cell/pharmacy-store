@@ -230,7 +230,6 @@ export async function setProductHidden(id:string,hidden:boolean):Promise<void>{
  await runTransaction(ctx.db,async tx=>{
   const snap=await tx.get(ref);if(!snap.exists())throw new Error("المنتج لم يعد موجودًا");
   const current=snap.data();
-  if(!hidden&&!eligibleForDisplay(current))throw new Error("لا يمكن الإظهار قبل اعتماد المراجعة والسماح بالإعلان وتصنيف المنتج");
   tx.update(ref,{owner_hidden:hidden,public_visible:derivedVisibility({...current,owner_hidden:hidden})});
  });
 }
