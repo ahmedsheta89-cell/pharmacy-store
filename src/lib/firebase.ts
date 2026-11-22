@@ -1,7 +1,8 @@
+import {derivedVisibility, eligibleForDisplay, importVisibility} from "./productVisibility";
 import {parseAppearance, isTheme,validSeasons, type StoreAppearance} from "./themes";
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import {
-  getFirestore, arrayUnion, runTransaction, collection, getDoc, getDocFromServer, setDoc, deleteDoc, writeBatch, serverTimestamp, query, where, orderBy,
+  getFirestore, arrayUnion, runTransaction, collection, getDoc, getDocFromServer, setDoc, deleteDoc, serverTimestamp, query, where, orderBy,
   onSnapshot, doc, type Firestore, type Unsubscribe,
 } from "firebase/firestore";
 import {
@@ -97,7 +98,7 @@ export async function placeOrder(payload: OrderPayload): Promise<PlaceOrderResul
     sessionStorage.setItem("pending-order",JSON.stringify(pending));
     const response=await fetch("https://oneforallgood-assistant.oneforallgood-store.workers.dev/orders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...payload,request_id:pending.request_id})});
     const result=await response.json();
-    if (!response.ok) throw new Error(result.error==="store_closed"?"استقبال الطلبات متوقف مؤقتًا. حاول لاحقًا.":result.error==="settings_unavailable"?"تعذر التحقق من حالة المتجر. حاول لاحقًا.":result.error==="price_changed"?"سعر منتج اتغير. حدث المتجر وراجع إجمالي السلة قبل التأكيد.":response.status===429?"استنى دقيقة قبل إرسال طلب جديد.":"تعذر إرسال الطلب. راجع البيانات وجرب تاني، أو كلم الصيدلية.");
+    if (!response.ok) throw new Error(result.error==="store_closed"?"استقبال الطلبات متوقف مؤقتًا. حاول لاحقًا.":result.error==="settings_unavailable"?"تعذر التحقق من حالة المتجر. حاول لاحقًا.":result.error==="product_unavailable"||result.error==="catalog_changed"?"منتج في السلة لم يعد متاحًا أو اتغير. حدث المتجر وراجع السلة قبل التأكيد.":result.error==="price_changed"?"سعر منتج اتغير. حدث المتجر وراجع إجمالي السلة قبل التأكيد.":response.status===429?"استنى دقيقة قبل إرسال طلب جديد.":"تعذر إرسال الطلب. راجع البيانات وجرب تاني، أو كلم الصيدلية.");
     sessionStorage.removeItem("pending-order");
     return {ok:true,orderCode:result.orderCode};
   } catch(error) {return {ok:false,reason:"error",message:error instanceof Error?error.message:"تعذر إرسال الطلب"};}
@@ -184,6 +185,7 @@ export type StoreProduct = {
   content_review_status?: "unreviewed" | "reviewed";
   prescription_status?: "unknown" | "non_prescription" | "prescription" | "not_medicine";
   advertising_status?: "unreviewed" | "approved" | "blocked";
+  owner_hidden?: boolean;
   public_visible?: boolean;
   stock_quantity?: number;
   import_source?: string;
@@ -194,14 +196,14 @@ export function watchProducts(callback: (products: StoreProduct[]) => void, mana
   if (!ctx) return null;
   const q = manager ? query(collection(ctx.db, "products"), orderBy("name")) : query(collection(ctx.db,"products"),where("public_visible","==",true));
   return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<StoreProduct, "id">) })).sort((a,b)=>a.name.localeCompare(b.name,"ar")));
+    callback(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<StoreProduct, "id">) })).filter(p=>manager || (p.public_visible===true && derivedVisibility(p))).sort((a,b)=>a.name.localeCompare(b.name,"ar")));
   });
 }
 
 
 export async function getPublicProduct(id:string):Promise<StoreProduct|null>{
  const ctx=ensure();if(!ctx||!/^[a-zA-Z0-9_-]{1,100}$/.test(id))return null;
- const d=await getDocFromServer(doc(ctx.db,"products",id));if(!d.exists()||d.data().public_visible!==true)return null;return {id:d.id,...d.data()} as StoreProduct;
+ const d=await getDocFromServer(doc(ctx.db,"products",id));if(!d.exists()||d.data().public_visible!==true||!derivedVisibility(d.data()))return null;return {id:d.id,...d.data()} as StoreProduct;
 }
 
 export async function upsertProduct(product: StoreProduct): Promise<void> {
@@ -211,8 +213,26 @@ export async function upsertProduct(product: StoreProduct): Promise<void> {
   if (product.stock_quantity!==undefined && (!Number.isInteger(product.stock_quantity)||product.stock_quantity<0)) throw new Error("كمية المخزون لازم تكون عددًا صحيحًا غير سالب");
   const reviewed=product.content_review_status==="reviewed";
   if(reviewed && (!product.content_source?.trim()||!product.content_reviewer?.trim()||!product.content_reviewed_at||!product.content_version?.trim())) throw new Error("أكمل المصدر والمراجع والتاريخ والنسخة قبل الاعتماد");
-  const { id, ...data } = {...product,public_visible:reviewed && product.advertising_status==="approved" && ["non_prescription","not_medicine"].includes(product.prescription_status||"")};
-  await setDoc(doc(ctx.db, "products", id), Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined)));
+  // Read the latest flag: saving an old editor must not undo a hide from another tab.
+  const ref=doc(ctx.db,"products",product.id);
+  await runTransaction(ctx.db,async tx=>{
+    const current=await tx.get(ref);
+    const owner_hidden=current.exists()?current.data().owner_hidden===true:product.owner_hidden===true;
+    const {id,...data}={...product,owner_hidden,public_visible:derivedVisibility({...product,owner_hidden})};
+    tx.set(ref,Object.fromEntries(Object.entries(data).filter(([,value])=>value!==undefined)));
+  });
+}
+
+// A visibility-only transaction cannot change prices, medical content or approval.
+export async function setProductHidden(id:string,hidden:boolean):Promise<void>{
+ const ctx=ensure();if(!ctx)throw new Error("Firebase غير مهيأ");
+ const ref=doc(ctx.db,"products",id);
+ await runTransaction(ctx.db,async tx=>{
+  const snap=await tx.get(ref);if(!snap.exists())throw new Error("المنتج لم يعد موجودًا");
+  const current=snap.data();
+  if(!hidden&&!eligibleForDisplay(current))throw new Error("لا يمكن الإظهار قبل اعتماد المراجعة والسماح بالإعلان وتصنيف المنتج");
+  tx.update(ref,{owner_hidden:hidden,public_visible:derivedVisibility({...current,owner_hidden:hidden})});
+ });
 }
 
 export async function deleteProductById(productId: string): Promise<void> {
@@ -224,12 +244,7 @@ export async function deleteProductById(productId: string): Promise<void> {
 export async function seedProducts(products: StoreProduct[]): Promise<void> {
   const ctx = ensure();
   if (!ctx) throw new Error("Firebase غير مهيأ");
-  const batch = writeBatch(ctx.db);
-  for (const product of products) {
-    const { id, ...data } = product;
-    batch.set(doc(ctx.db, "products", id), {...data,description:"",content_review_status:"unreviewed",prescription_status:"unknown",advertising_status:"unreviewed",public_visible:false});
-  }
-  await batch.commit();
+  await bulkImportProducts(products.map(p=>({...p,description:""})),()=>{});
 }
 
 export type PromoBanner = {
@@ -285,7 +300,14 @@ export function watchFeedback(callback: (feedback: OrderFeedback[]) => void) {
 // Each chunk is atomic. A failure reports exactly how many earlier rows committed.
 export async function bulkImportProducts(products:StoreProduct[],onProgress:(saved:number)=>void){
  const ctx=ensure();if(!ctx)throw new Error("Firebase غير مهيأ");if(products.length>1000)throw new Error("قسم الملف لأجزاء حتى 1000 منتج");let saved=0;
- try {for(let i=0;i<products.length;i+=200){const batch=writeBatch(ctx.db);for(const p of products.slice(i,i+200)){const {id,...data}=p;batch.set(doc(ctx.db,"products",id),Object.fromEntries(Object.entries({...data,content_review_status:"unreviewed",advertising_status:"unreviewed",prescription_status:"unknown",public_visible:false}).filter(([,v])=>v!==undefined)));}await batch.commit();saved+=Math.min(200,products.length-i);onProgress(saved);}}
+ try {for(let i=0;i<products.length;i+=200){
+  const chunk=products.slice(i,i+200),refs=chunk.map(p=>doc(ctx.db,"products",p.id));
+  await runTransaction(ctx.db,async tx=>{
+   const current=await Promise.all(refs.map(ref=>tx.get(ref)));
+   chunk.forEach((p,n)=>{const {id,...data}=p;tx.set(refs[n],Object.fromEntries(Object.entries({...data,...importVisibility(current[n].exists()?current[n].data():undefined)}).filter(([,v])=>v!==undefined)));});
+  });
+  saved+=chunk.length;onProgress(saved);
+ }}
  catch {throw new Error(`توقف الاستيراد بعد حفظ ${saved} من ${products.length}. الصفوف المحفوظة مسودات خاصة. راجعها قبل إعادة المحاولة، واستخدم نفس المعرفات لمنع التكرار.`);}
 }
 

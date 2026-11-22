@@ -1,9 +1,10 @@
+import {eligibleForDisplay, visibilityLabel} from "../lib/productVisibility";
 import AppearancePanel from "./AppearancePanel";
 import { useEffect, useRef, useState } from "react";
 import { CATEGORIES, PRODUCTS, formatPrice } from "../lib/catalog";
 import {
   isFirebaseConfigured, managerSendPasswordReset, managerSignIn, managerSignOut,
-  deleteProductById, seedProducts, upsertProduct, watchAuth, watchOrders, watchProducts,
+  deleteProductById, seedProducts, setProductHidden, upsertProduct, watchAuth, watchOrders, watchProducts,
   watchFeedback, type OrderFeedback, type StoreOrder, type StoreProduct,
 } from "../lib/firebase";
 import { STORE } from "../lib/site";
@@ -89,6 +90,14 @@ function ProductsPanel() {
   const [isNew, setIsNew] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  const [toggling, setToggling] = useState<string|null>(null);
+  const [notice, setNotice] = useState("");
+  async function toggle(p:StoreProduct){
+    const hidden=p.owner_hidden!==true && p.public_visible===true;
+    setToggling(p.id);setError("");setNotice("");
+    try{await setProductHidden(p.id,hidden);setNotice(hidden?`تم إخفاء ${p.name} من المتجر. لن يقبل طلبه من سلة قديمة.`:`تم إظهار ${p.name} للعملاء.`);}catch(e){setError(e instanceof Error?e.message:"تعذر تغيير الظهور");}finally{setToggling(null);}
+  }
 
   useEffect(() => {
     const unsub = watchProducts(setProducts,true);
@@ -216,10 +225,12 @@ function ProductsPanel() {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-bold text-slate-600">عدد المنتجات: {products.length} · المعتمد للعرض: {products.filter(p=>p.public_visible).length}</p>
+        <p className="text-sm font-bold text-slate-600">عدد المنتجات: {products.length} · الظاهر للعملاء: {products.filter(p=>p.public_visible&&p.owner_hidden!==true&&eligibleForDisplay(p)).length}</p>
         <button onClick={startAdd} className="rounded-xl bg-brand-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-800">+ إضافة منتج</button>
       </div>
       {error && <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{error}</p>}
+      <p className="mb-3 text-sm leading-7 text-slate-600">تحكم في ظهور كل منتج من زر إظهار / إخفاء. الإخفاء لا يحذف المنتج. الإظهار متاح بعد اعتماد المراجعة والسماح بالإعلان فقط.</p>
+      {notice && <p role="status" className="mb-3 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
       <CatalogExcel products={products}/>
       {products.length === 0 ? (
         <div className="rounded-2xl border border-brand-100 bg-white p-10 text-center">
@@ -230,14 +241,16 @@ function ProductsPanel() {
       ) : (
         <div className="space-y-2">
           {products.map((product) => (
-            <article key={product.id} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-brand-100 bg-white px-4 py-3 shadow-sm">
+            <article key={product.id} className="flex flex-col gap-3 rounded-2xl border border-brand-100 bg-white px-4 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <p className="truncate font-bold text-brand-950">{product.name}</p>
+                <div className="flex flex-wrap items-center gap-2"><p className="break-words font-bold text-brand-950">{product.name}</p><span className={`rounded-full px-2 py-1 text-xs font-bold ${product.public_visible&&product.owner_hidden!==true&&eligibleForDisplay(product)?"bg-emerald-100 text-emerald-800":"bg-slate-100 text-slate-700"}`}>{visibilityLabel(product)}</span></div>
                 <p className="text-xs text-slate-500">{CATEGORIES.find((c) => c.id === product.category)?.name ?? product.category} · {formatPrice(product.price)} / {product.unit}</p>
+                {!eligibleForDisplay(product)&&<p className="mt-1 text-xs leading-6 text-amber-800">قبل الإظهار: اعتمد المراجعة والسماح بالإعلان، وحدد تصنيف المنتج من «تعديل».</p>}
               </div>
-              <div className="flex gap-2">
-                <button onClick={() => startEdit(product)} className="rounded-xl border border-brand-100 px-3.5 py-2 text-xs font-bold text-brand-700 hover:bg-brand-50">تعديل</button>
-                <button onClick={() => void remove(product)} disabled={busy} className="rounded-xl border border-red-200 px-3.5 py-2 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-60">حذف</button>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <button type="button" disabled={busy||toggling!==null || (!(product.public_visible&&product.owner_hidden!==true)&&!eligibleForDisplay(product))} onClick={()=>void toggle(product)} aria-label={`${product.public_visible&&product.owner_hidden!==true?"إخفاء":"إظهار"} ${product.name}`} title={!eligibleForDisplay(product)?"أكمل الاعتماد من تعديل أولًا":undefined} className={`min-w-20 rounded-xl border px-3.5 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50 ${product.public_visible&&product.owner_hidden!==true?"border-amber-200 bg-amber-50 text-amber-900":"border-emerald-200 bg-emerald-50 text-emerald-800"}`}>{toggling===product.id?"جارٍ الحفظ...":product.public_visible&&product.owner_hidden!==true?"إخفاء":"إظهار"}</button>
+                <button disabled={busy||toggling!==null} onClick={() => startEdit(product)} className="rounded-xl border border-brand-100 px-3.5 py-2 text-xs font-bold text-brand-700 hover:bg-brand-50 disabled:opacity-50">تعديل</button>
+                <button onClick={() => void remove(product)} disabled={busy||toggling!==null} className="rounded-xl border border-red-200 px-3.5 py-2 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-60">حذف</button>
               </div>
             </article>
           ))}

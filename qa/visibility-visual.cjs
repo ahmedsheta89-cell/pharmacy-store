@@ -1,0 +1,10 @@
+const {chromium}=require('playwright');const assert=require('node:assert/strict');
+(async()=>{const browser=await chromium.launch({headless:true,executablePath:'/opt/google/chrome/chrome',args:['--no-sandbox']});const context=await browser.newContext();
+await context.route('**/*',r=>['127.0.0.1','fonts.googleapis.com','fonts.gstatic.com'].includes(new URL(r.request().url()).hostname)?r.continue():r.abort());
+const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+await page.goto('http://127.0.0.1:5186/admin');await page.getByRole('button',{name:'المنتجات',exact:true}).click();
+const first=page.locator('article').filter({hasText:'عبوة عناية تجريبية'});const hidden=page.locator('article').filter({hasText:'مستلزمات يومية تجريبية'});const draft=page.locator('article').filter({hasText:'مجموعة عناية تجريبية'});
+assert.ok(await first.getByRole('button',{name:/إخفاء/}).isEnabled());assert.ok(await hidden.getByRole('button',{name:/إظهار/}).isEnabled());assert.ok(await draft.getByRole('button',{name:/إظهار/}).isDisabled());
+for(const width of [320,390,1280]){await page.setViewportSize({width,height:900});await page.evaluate(()=>document.fonts.ready);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.screenshot({path:'/downloads/visibility-admin-'+width+'.png',fullPage:true});}
+await first.getByRole('button',{name:/إخفاء/}).click();await first.getByText('مخفي يدويًا',{exact:true}).waitFor();await page.getByRole('status').filter({hasText:'تم إخفاء'}).waitFor();await first.getByRole('button',{name:/إظهار/}).click();await first.getByText('ظاهر للعملاء',{exact:true}).waitFor();await page.getByRole('status').filter({hasText:'تم إظهار'}).waitFor();
+assert.deepEqual(errors,[]);await page.setViewportSize({width:390,height:900});await page.screenshot({path:'/downloads/visibility-toggle-success.png',fullPage:true});console.log('PASS mobile/desktop visibility badges, show/hide interactions, blocked draft, no overflow or JS errors');await browser.close();})();
