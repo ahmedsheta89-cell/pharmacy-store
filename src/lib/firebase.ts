@@ -1,4 +1,5 @@
 import {reviewIssues} from "./productReview";
+import {isStoredProductPhotoUrl,productPhotoIdentity} from "./productPhotoMatching";
 import {derivedVisibility, eligibleForDisplay, importVisibility} from "./productVisibility";
 import {parseAppearance, isTheme,validSeasons, type StoreAppearance} from "./themes";
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
@@ -217,14 +218,14 @@ export function watchProducts(callback: (products: StoreProduct[]) => void, mana
   if (!ctx) return null;
   const q = manager ? query(collection(ctx.db, "products"), orderBy("name")) : query(collection(ctx.db,"products"),where("public_visible","==",true));
   return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<StoreProduct, "id">) })).filter(p=>manager || (p.public_visible===true && derivedVisibility(p))).sort((a,b)=>a.name.localeCompare(b.name,"ar")));
+    callback(snap.docs.map((d) => ({ ...(d.data() as Omit<StoreProduct, "id">), id: d.id })).filter(p=>manager || (p.public_visible===true && derivedVisibility(p))).sort((a,b)=>a.name.localeCompare(b.name,"ar")));
   });
 }
 
 
 export async function getPublicProduct(id:string):Promise<StoreProduct|null>{
  const ctx=ensure();if(!ctx||!/^[a-zA-Z0-9_-]{1,100}$/.test(id))return null;
- const d=await getDocFromServer(doc(ctx.db,"products",id));if(!d.exists()||d.data().public_visible!==true||!derivedVisibility(d.data()))return null;return {id:d.id,...d.data()} as StoreProduct;
+ const d=await getDocFromServer(doc(ctx.db,"products",id));if(!d.exists()||d.data().public_visible!==true||!derivedVisibility(d.data()))return null;return {...d.data(),id:d.id} as StoreProduct;
 }
 
 export async function upsertProduct(product: StoreProduct): Promise<void> {
@@ -252,6 +253,23 @@ export async function setProductHidden(id:string,hidden:boolean):Promise<void>{
   const snap=await tx.get(ref);if(!snap.exists())throw new Error("المنتج لم يعد موجودًا");
   const current=snap.data();
   tx.update(ref,{owner_hidden:hidden,public_visible:derivedVisibility({...current,owner_hidden:hidden})});
+ });
+}
+
+// Image-only writes preserve concurrent price/content/hide edits and reject a
+// stale image or changed pack identity rather than overwriting newer work.
+export async function assignProductPhoto(input:{productId:string;imageUrl:string;expectedImageUrl:string;expectedIdentity:string}):Promise<void>{
+ const ctx=ensure();if(!ctx)throw new Error("Firebase غير مهيأ");
+ if(!/^[a-zA-Z0-9_-]{1,100}$/.test(input.productId)||!isStoredProductPhotoUrl(input.imageUrl))throw new Error("بيانات ربط الصورة غير صحيحة");
+ const ref=doc(ctx.db,"products",input.productId);
+ await runTransaction(ctx.db,async tx=>{
+  const snap=await tx.get(ref);if(!snap.exists())throw new Error("المنتج لم يعد موجودًا. راجع اختيار الصورة.");
+  const current=snap.data();
+  if(productPhotoIdentity({...current,id:snap.id})!==input.expectedIdentity)throw new Error("اسم المنتج أو بيانات العبوة اتغيرت. حدّث القائمة وراجع اختيار الصورة.");
+  const currentUrl=String(current.imageUrl||"").trim();
+  if(currentUrl===input.imageUrl)return; // A retry must not undo a later review.
+  if(currentUrl!==input.expectedImageUrl.trim())throw new Error("صورة المنتج اتغيرت أثناء المراجعة. حدّث القائمة وراجع الاستبدال.");
+  tx.update(ref,{imageUrl:input.imageUrl,content_review_status:"unreviewed",public_visible:false});
  });
 }
 

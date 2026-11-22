@@ -14,7 +14,7 @@ The preview has a readable failure state and manual reload button. KV propagatio
 
 ## Worker and storage
 
-POST /photos requires an allowed production storefront Origin, a verified Firebase owner token and a bounded JPEG body. Missing rate-limiter or KV bindings fail closed. The limit is 20 requests per minute per IP and per owner. JPEG frame and scan structure and dimensions are checked. IDs are SHA-256 hashes. Identical-byte retries reuse the existing key rather than another KV write.
+POST /photos requires an allowed production storefront Origin, a verified Firebase owner token and a bounded JPEG body. Missing rate-limiter or KV bindings fail closed. The limit is 20 requests per minute per IP and per owner. JPEG frame and scan structure and dimensions are checked. IDs are SHA-256 hashes. Identical bytes use the same key. An already-visible KV value avoids another write, but this is a best-effort quota optimization, not a cross-location transaction under eventual consistency.
 
 GET /media/:hash is public. It returns JPEG with nosniff and sandbox CSP headers, using a canonical immutable edge-cache key. No filename, customer data or authentication token is embedded in the stored image. Successful uploads warm the local edge cache from the validated bytes. Cache failures do not undo a successful KV write or prevent a valid image response.
 
@@ -28,7 +28,7 @@ Build and unit/regression tests:
 
 ```
 npm run build
-node --experimental-strip-types --test qa/photos.test.mjs qa/visibility.test.mjs qa/themes.test.mjs qa/orders.test.mjs
+node --experimental-strip-types --test qa/photo-matching.test.mjs qa/photos.test.mjs qa/visibility.test.mjs qa/themes.test.mjs qa/orders.test.mjs
 ```
 
 Visual and browser-format checks:
@@ -66,7 +66,11 @@ Before release: complete independent review; recheck the exact free plan, quota,
 
 ## Next stage
 
-Bulk upload and reviewed matching are not implemented yet. Only unique exact SKU/barcode/filename matches may auto-link. Ambiguous identities, strengths and pack sizes must enter review and never silently publish. Visual AI needs a supported exact model, a verified free path and a quota limit before implementation. No paid recognition API is approved.
+The bulk review UI is not implemented yet. Its local matching foundation accepts a full filename-to-ID match only when both the normalized code and target are unique. Workbook SKU/barcode aliases currently map to that document ID. Leading zeros, suffixes, strength and pack numbers are not discarded. Case-fold collisions, duplicate files for one target, unsafe filenames and name hints cannot auto-link. Name suggestions are review hints, not recognition results.
+
+The image-only assignment transaction checks the selected product identity and previous image against current data. It updates only the image and review/public flags, preserves concurrent prices/stock/content/hiding, rejects a changed image or pack, and never recreates a deleted product. An already-applied retry preserves a later human review. Product reads take their ID from the document, not a conflicting legacy payload field. These paths have unit and actual data-layer emulator coverage.
+
+Ambiguous identities, strengths and pack sizes must enter review and never silently publish. Visual AI needs a supported exact model, a verified free path and a quota limit before implementation. The exact Qwen model is documented as vision-capable, but its current official playground has no image input, so no inference was submitted and real image support on the store binding remains unverified. No paid recognition API is approved.
 
 ## Sources
 

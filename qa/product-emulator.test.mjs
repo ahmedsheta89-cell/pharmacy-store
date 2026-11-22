@@ -1,3 +1,4 @@
+import {productPhotoIdentity} from '../src/lib/productPhotoMatching.ts';
 import test from 'node:test';import assert from 'node:assert/strict';import {readFile,writeFile,unlink} from 'node:fs/promises';
 import {createRequire} from 'node:module';import {initializeApp,deleteApp} from 'firebase/app';
 import {getFirestore,connectFirestoreEmulator,doc,setDoc,getDoc,deleteDoc} from 'firebase/firestore';
@@ -33,4 +34,34 @@ test('actual legacy document with no visibility or approval fields supports both
  await runtime.setProductHidden('qa-legacy',true);assert.deepEqual((await getDoc(ref)).data(),{name:'Legacy fixture only',price:5,owner_hidden:true,public_visible:false});
  await runtime.setProductHidden('qa-legacy',false);assert.deepEqual((await getDoc(ref)).data(),{name:'Legacy fixture only',price:5,owner_hidden:false,public_visible:false});await deleteDoc(ref);
 });
-test.after(async()=>{await deleteDoc(doc(db,'products',approved.id));await deleteDoc(doc(db,'products','qa-new-import'));await deleteApp(app);await unlink(file);});
+const photoId='qa-photo-link',photoRef=doc(db,'products',photoId),oldPhoto='https://example.test/old-photo.jpg';
+const uploadedPhoto='https://oneforallgood-assistant.oneforallgood-store.workers.dev/media/'+'a'.repeat(64);
+const photoCurrent=async()=>({...(await getDoc(photoRef)).data(),id:photoId});
+test('actual image-only transaction preserves concurrent business/hide edits and resets review',async()=>{
+ await runtime.upsertProduct({...approved,id:photoId,imageUrl:oldPhoto});const original=await photoCurrent();
+ await runtime.upsertProduct({...original,price:99,stock_quantity:17,description:'Concurrent edit retained'});await runtime.setProductHidden(photoId,true);const latest=await photoCurrent();
+ await runtime.assignProductPhoto({productId:photoId,imageUrl:uploadedPhoto,expectedImageUrl:oldPhoto,expectedIdentity:productPhotoIdentity(original)});
+ assert.deepEqual(await photoCurrent(),{...latest,imageUrl:uploadedPhoto,content_review_status:'unreviewed',public_visible:false});
+});
+test('retrying an already linked photo does not undo a later human review',async()=>{
+ await runtime.upsertProduct({...await photoCurrent(),content_review_status:'reviewed'});const reviewed=await photoCurrent();
+ await runtime.assignProductPhoto({productId:photoId,imageUrl:uploadedPhoto,expectedImageUrl:oldPhoto,expectedIdentity:productPhotoIdentity(reviewed)});assert.deepEqual(await photoCurrent(),reviewed);
+});
+test('image transaction rejects a concurrently changed photo and changed pack identity',async()=>{
+ const original=await photoCurrent(),different=uploadedPhoto.replace(/a{64}$/,'b'.repeat(64)),next=uploadedPhoto.replace(/a{64}$/,'c'.repeat(64));
+ await runtime.upsertProduct({...original,imageUrl:different});const changed=await photoCurrent();
+ await assert.rejects(runtime.assignProductPhoto({productId:photoId,imageUrl:next,expectedImageUrl:original.imageUrl,expectedIdentity:productPhotoIdentity(original)}),/صورة المنتج اتغيرت/);assert.deepEqual(await photoCurrent(),changed);
+ await runtime.upsertProduct({...changed,name:changed.name+' changed pack',unit:'bottle'});const renamed=await photoCurrent();
+ await assert.rejects(runtime.assignProductPhoto({productId:photoId,imageUrl:next,expectedImageUrl:different,expectedIdentity:productPhotoIdentity(changed)}),/بيانات العبوة اتغيرت/);assert.deepEqual(await photoCurrent(),renamed);
+});
+test('image transaction refuses an invalid URL and cannot recreate a deleted product',async()=>{
+ const original=await photoCurrent();await assert.rejects(runtime.assignProductPhoto({productId:photoId,imageUrl:'https://example.test/not-uploaded.jpg',expectedImageUrl:original.imageUrl,expectedIdentity:productPhotoIdentity(original)}),/ربط الصورة/);assert.deepEqual(await photoCurrent(),original);
+ await deleteDoc(photoRef);await assert.rejects(runtime.assignProductPhoto({productId:photoId,imageUrl:uploadedPhoto,expectedImageUrl:original.imageUrl,expectedIdentity:productPhotoIdentity(original)}),/لم يعد موجودًا/);assert.equal((await getDoc(photoRef)).exists(),false);
+});
+test('catalog ID is the real document ID even if legacy payload contains another ID',async()=>{
+ const id='qa-id-binding';const raw={...approved,id:'not-the-document-id',public_visible:true,owner_hidden:false};
+ const fields=Object.fromEntries(Object.entries(raw).map(([k,v])=>[k,typeof v==='boolean'?{booleanValue:v}:typeof v==='number'?{integerValue:String(v)}:{stringValue:v}]));
+ const seeded=await fetch('http://127.0.0.1:8086/v1/projects/demo-theme-check/databases/(default)/documents/products/'+id,{method:'PATCH',headers:{Authorization:'Bearer owner','Content-Type':'application/json'},body:JSON.stringify({fields})});assert.ok(seeded.ok);
+ const rows=await new Promise((resolve,reject)=>{const timer=setTimeout(()=>{stop?.();reject(new Error('catalog listener timeout'));},4000);let stop=runtime.watchProducts(rows=>{if(rows.some(p=>p.id===id)){clearTimeout(timer);stop?.();resolve(rows);}},true);});assert.ok(rows.some(p=>p.id===id));assert.ok(!rows.some(p=>p.id==='not-the-document-id'));assert.equal((await runtime.getPublicProduct(id)).id,id);await deleteDoc(doc(db,'products',id));
+});
+test.after(async()=>{await deleteDoc(photoRef);await deleteDoc(doc(db,'products',approved.id));await deleteDoc(doc(db,'products','qa-new-import'));await deleteApp(app);await unlink(file);});

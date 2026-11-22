@@ -16,6 +16,7 @@ export default function ProductPhotoField({value,onChange,onPendingChange,disabl
   useEffect(()=>()=>{if(ready)URL.revokeObjectURL(ready.url);},[ready]);
   async function select(file:File|undefined){
     if(!file)return;
+    onPendingChange(true);
     const current=++generation.current;
     setError('');setNotice('');setReady(null);setPhase('preparing');
     try{
