@@ -1,3 +1,4 @@
+import DeliverySettingsPanel from './DeliverySettingsPanel';
 import {eligibleForDisplay, visibilityLabel} from "../lib/productVisibility";
 import AppearancePanel from "./AppearancePanel";
 import { useEffect, useRef, useState } from "react";
@@ -75,6 +76,7 @@ function OrdersPanel({ orders }: { orders: StoreOrder[] | null }) {
                   </li>
                 ))}
               </ul>
+              {order.pricing_version===2 ? <div className="mt-3 space-y-1 border-t border-brand-50 pt-2 text-sm"><p className="flex justify-between"><span>قيمة المنتجات</span><span>{formatPrice(order.subtotal!)}</span></p><p className="flex justify-between"><span>التوصيل: {order.delivery_zone_name}</span><span>{formatPrice(order.delivery_fee!)}</span></p><p className="text-xs text-slate-500">مدة تقديرية بعد التأكيد: {order.delivery_eta_min} إلى {order.delivery_eta_max} دقيقة</p></div> : <p className="mt-2 text-xs text-slate-500">المبلغ للمنتجات؛ رسوم التوصيل لم تسجل ضمن هذا الطلب.</p>}
               <p className="mt-2 flex justify-between border-t border-brand-50 pt-2 font-black">
                 <span>الإجمالي</span><span className="text-brand-700">{formatPrice(order.total)}</span>
               </p>
@@ -277,7 +279,7 @@ export default function Admin() {
   const audio = useRef<AudioContext | null>(null);
   const knownOrders = useRef<Set<string> | null>(null);
   const [orders, setOrders] = useState<StoreOrder[] | null>(null);
-  const [tab, setTab] = useState<"orders" | "products" | "banners" | "feedback" | "appearance">("orders");
+  const [tab, setTab] = useState<"orders" | "products" | "banners" | "feedback" | "appearance" | "delivery">("orders");
 
   useEffect(() => {
     const unsub = watchAuth((u) => { setSignedIn(Boolean(u)); setAuthChecked(true); });
@@ -401,9 +403,10 @@ export default function Admin() {
               <button onClick={() => setTab("products")} className={`rounded-xl px-5 py-2.5 text-sm font-bold transition ${tab === "products" ? "bg-brand-700 text-white" : "border border-brand-100 bg-white text-slate-600 hover:bg-brand-50"}`}>المنتجات</button>
               <button onClick={() => setTab("banners")} className={`rounded-xl px-5 py-2.5 text-sm font-bold transition ${tab === "banners" ? "bg-brand-700 text-white" : "border border-brand-100 bg-white text-slate-600 hover:bg-brand-50"}`}>الإعلانات والعروض</button>
               <button onClick={()=>setTab("appearance")} className={`rounded-xl px-5 py-2.5 text-sm font-bold ${tab==="appearance"?"bg-brand-700 text-white":"border border-brand-100 bg-white text-slate-600"}`}>المظهر واستقبال الطلبات</button>
+              <button onClick={()=>setTab("delivery")} className={`rounded-xl px-5 py-2.5 text-sm font-bold ${tab==="delivery"?"bg-brand-700 text-white":"border border-brand-100 bg-white text-slate-600"}`}>إعدادات التوصيل</button>
               <button onClick={()=>setTab("feedback")} className={`rounded-xl px-5 py-2.5 text-sm font-bold ${tab==="feedback"?"bg-brand-700 text-white":"border border-brand-100 bg-white text-slate-600"}`}>تقييمات العملاء</button>
             </div>
-            {tab === "appearance" ? <AppearancePanel /> : tab === "orders" ? <OrdersPanel orders={orders} /> : tab === "products" ? <ProductsPanel /> : tab==="banners" ? <BannersPanel /> : <section className="space-y-3"><h2 className="font-black">تقييمات العملاء بعد التسليم</h2><p className="text-xs text-slate-500">التقييمات خاصة بالإدارة، مش منشورة في المتجر.</p>{!feedback.length && <p className="rounded-xl bg-white p-8 text-center text-sm text-slate-500">مفيش تقييمات لسه.</p>}{feedback.map((f)=><article key={f.id} className="rounded-xl border border-brand-100 bg-white p-5"><p className="font-bold">{f.rating} / 5</p><p className="mt-2 whitespace-pre-wrap text-sm leading-7">{f.comment || "بدون تعليق"}</p><time className="mt-2 block text-xs text-slate-400">{new Date(f.created_at).toLocaleString("ar-EG")}</time></article>)}</section>}
+            {tab === "delivery" ? <DeliverySettingsPanel /> : tab === "appearance" ? <AppearancePanel /> : tab === "orders" ? <OrdersPanel orders={orders} /> : tab === "products" ? <ProductsPanel /> : tab==="banners" ? <BannersPanel /> : <section className="space-y-3"><h2 className="font-black">تقييمات العملاء بعد التسليم</h2><p className="text-xs text-slate-500">التقييمات خاصة بالإدارة، مش منشورة في المتجر.</p>{!feedback.length && <p className="rounded-xl bg-white p-8 text-center text-sm text-slate-500">مفيش تقييمات لسه.</p>}{feedback.map((f)=><article key={f.id} className="rounded-xl border border-brand-100 bg-white p-5"><p className="font-bold">{f.rating} / 5</p><p className="mt-2 whitespace-pre-wrap text-sm leading-7">{f.comment || "بدون تعليق"}</p><time className="mt-2 block text-xs text-slate-400">{new Date(f.created_at).toLocaleString("ar-EG")}</time></article>)}</section>}
           </>
         )}
       </main>

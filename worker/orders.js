@@ -1,3 +1,4 @@
+import {EMPTY_DELIVERY_POLICY,validateDeliveryPolicy,deliveryQuote} from '../shared/deliveryPolicy.js';
 const PROJECT='one-for-all-good';
 const BASE=`https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
 const NAME=`projects/${PROJECT}/databases/(default)/documents`;
@@ -22,6 +23,31 @@ function decode(v){if('stringValue'in v)return v.stringValue;if('integerValue'in
 function object(f){return Object.fromEntries(Object.entries(f||{}).map(([k,v])=>[k,decode(v)]));}
 async function db(env,path,method='GET',body){const r=await fetch(BASE+path,{method,headers:{Authorization:'Bearer '+await access(env),'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});let data=await r.json();if(!r.ok){const e=new Error(data.error?.status||'database_unavailable');e.status=r.status;throw e;}return data;}
 async function get(env,path){try{const d=await db(env,'/'+path);return {data:object(d.fields),updateTime:d.updateTime};}catch(e){if(e.status===404)return null;throw e;}}
+const POLICY_PATH='store_private/delivery_policy';
+async function loadDeliveryPolicy(env){
+ const snapshot=await get(env,POLICY_PATH);if(!snapshot)return {policy:{...EMPTY_DELIVERY_POLICY,zones:[]},snapshot:null};
+ const data=snapshot.data;if(typeof data.version!=='string'||!/^[-a-zA-Z0-9_]{8,80}$/.test(data.version))throw new Error('invalid_delivery_policy');
+ return {policy:{...validateDeliveryPolicy({enabled:data.enabled,zones:data.zones}),version:data.version},snapshot};
+}
+export async function publicDeliveryPolicy(_request,env){
+ const {policy}=await loadDeliveryPolicy(env);return {status:200,body:{policy:{...policy,zones:policy.enabled?policy.zones:[]}}};
+}
+export async function ownerDeliveryPolicy(request,env){
+ const token=request.headers.get('Authorization')?.match(/^Bearer ([^\s]{1,10000})$/)?.[1];if(!token)return {status:401,body:{error:'auth_required'}};
+ if(env.PHOTO_LIMITER&&!(await env.PHOTO_LIMITER.limit({key:'delivery-admin:'+(request.headers.get('CF-Connecting-IP')||'unknown')})).success)return {status:429,body:{error:'too_many_requests'}};
+ const auth=await fetch('https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=AIzaSyCsRvLEcaGr1DV6a6HFHmR4Xe9mzqgpApQ',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({idToken:token})});
+ const identity=await auth.json(),owner=identity.users?.[0];if(!auth.ok||owner?.email!=='ahmedsheta89@gmail.com'||owner.disabled)return {status:403,body:{error:'manager_only'}};
+ const current=await loadDeliveryPolicy(env);if(request.method==='GET')return {status:200,body:{policy:current.policy}};
+ if(request.method!=='PUT')return {status:405,body:{error:'method_not_allowed'}};
+ if(!request.headers.get('Content-Type')?.includes('application/json'))return {status:415,body:{error:'json_required'}};
+ const raw=await request.text();if(raw.length>24000)return {status:413,body:{error:'too_large'}};
+ let input,clean;try{input=JSON.parse(raw);if(!input||Object.keys(input).some(key=>!['expected_version','enabled','zones'].includes(key)))throw new Error();clean=validateDeliveryPolicy({enabled:input.enabled,zones:input.zones});}catch{return {status:400,body:{error:'invalid_policy'}};}
+ if(input.expected_version!==current.policy.version)return {status:409,body:{error:'policy_conflict'}};
+ const policy={...clean,version:crypto.randomUUID()},data={...policy,updated_at:new Date().toISOString(),updated_by:owner.localId};
+ try{await db(env,':commit','POST',{writes:[{update:{name:NAME+'/'+POLICY_PATH,fields:fields(data)},currentDocument:current.snapshot?{updateTime:current.snapshot.updateTime}:{exists:false}}]});}catch(error){if([409,412].includes(error.status))return {status:409,body:{error:'policy_conflict'}};throw error;}
+ const verified=await loadDeliveryPolicy(env);if(verified.policy.version!==policy.version)return {status:409,body:{error:'policy_conflict'}};
+ return {status:200,body:{policy:verified.policy}};
+}
 const phone=v=>String(v).replace(/[٠-٩]/g,d=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/[^0-9]/g,'').replace(/^(0020|20)/,'').replace(/^0/,'');
 function code(){const a='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';return [...crypto.getRandomValues(new Uint8Array(12))].map(x=>a[x&31]).join('');}
 const labels={new:'new',confirmed:'confirmed',preparing:'preparing',out_for_delivery:'out_for_delivery',delivered:'delivered',cancelled:'cancelled'};
@@ -41,15 +67,18 @@ async function notify(env,id,snapshot=null){
  const next=sent?{status:o.status,expected_at:o.expected_at||null,late_for:late?o.expected_at:(state.late_for||null),sent_at:new Date().toISOString(),message_id:messageId}:{...state,last_error_at:new Date().toISOString(),sending_at:null};
  await db(env,':commit','POST',{writes:[{update:{name:NAME+'/orders/'+id,fields:fields({notification_state:next,notification_pending:!sent})},updateMask:{fieldPaths:['notification_state','notification_pending']},currentDocument:{updateTime:claim.writeResults[0].updateTime}}]});
 }
+function orderResult(order,recovered=false){return {ok:true,orderCode:order.code,total:order.total,...(order.pricing_version===2?{pricing_version:2,subtotal:order.subtotal,delivery_fee:order.delivery_fee}:{}),recovered};}
 export async function createOrder(request,env,ctx){
  const raw=await request.text();if(raw.length>18000)return {status:413,body:{error:'too_large'}};
  let b;try{b=JSON.parse(raw);}catch{return {status:400,body:{error:'invalid_json'}};}
  const name=typeof b.customer_name==='string'?b.customer_name.trim():'',address=typeof b.customer_address==='string'?b.customer_address.trim():'',p=phone(b.customer_phone||''),notes=typeof b.notes==='string'?b.notes.trim():'';
  if(!/^[0-9a-f-]{36}$/i.test(b.request_id||'')||name.length<2||name.length>100||address.length<5||address.length>500||!/^1[0125][0-9]{8}$/.test(p)||notes.length>1000||!Array.isArray(b.items)||b.items.length<1||b.items.length>50)return {status:400,body:{error:'invalid_order'}};
- const id='web-'+await digest(b.request_id);let existing=await get(env,'orders/'+id);if(existing)return {status:200,body:{ok:true,orderCode:existing.data.code,total:existing.data.total}};
+ const id='web-'+await digest(b.request_id);let existing=await get(env,'orders/'+id);if(existing)return {status:200,body:orderResult(existing.data,true)};
  let appearance;try{appearance=await get(env,'store_public/appearance');}catch{return {status:503,body:{error:'settings_unavailable'}};}
  if(appearance?.data.accepting_orders===false)return {status:503,body:{error:'store_closed'}};
  if(env.ORDER_LIMITER){const rate=await env.ORDER_LIMITER.limit({key:request.headers.get('CF-Connecting-IP')||'unknown'});if(!rate.success)return {status:429,body:{error:'too_many_orders'}};}
+ let delivery;try{delivery=await loadDeliveryPolicy(env);}catch{return {status:503,body:{error:'delivery_policy_unavailable'}};}
+ if((delivery.policy.enabled||b.delivery_policy_version!==undefined)&&b.delivery_policy_version!==delivery.policy.version)return {status:409,body:{error:'delivery_policy_changed'}};
  const seen=new Set(),items=[];let total=0;
  for(const item of b.items){if(typeof item.product_id!=='string'||!/^[a-zA-Z0-9_-]{1,100}$/.test(item.product_id)||seen.has(item.product_id)||!Number.isInteger(item.quantity)||item.quantity<1||item.quantity>20)return {status:400,body:{error:'invalid_item'}};seen.add(item.product_id);}
  // One batch request keeps large carts below the free Worker's subrequest cap.
@@ -57,13 +86,16 @@ export async function createOrder(request,env,ctx){
  const versions=productRows.filter(row=>row.found).map(row=>row.found);
  const catalog=new Map(versions.map(row=>[row.name.split('/').pop(),{...object(row.fields),_version:row.updateTime}]));
  for(const item of b.items){const product=catalog.get(item.product_id),price=product?.price;if(!product||!product._version||product.owner_hidden===true||product.public_visible!==true||product.advertising_status!=='approved'||product.content_review_status!=='reviewed'||!['non_prescription','not_medicine'].includes(product.prescription_status)||typeof price!=='number'||!Number.isFinite(price)||price<0||(product.stock_quantity!==undefined&&item.quantity>product.stock_quantity))return {status:400,body:{error:'product_unavailable'}};items.push({product_id:item.product_id,product_name:product.name,unit_price:price,quantity:item.quantity});total+=Math.round(price*100)*item.quantity;}
- total/=100;if(total<=0||total>1000000)return {status:400,body:{error:'invalid_total'}};
+ const subtotal=total/100;let quote;try{quote=deliveryQuote(delivery.policy,b.delivery_zone_id,total);}catch{return {status:400,body:{error:'delivery_area_required'}};}
+ total=quote.total_cents/100;if(subtotal<=0||total>1000000)return {status:400,body:{error:'invalid_total'}};
  // Price changes require the customer to review the new total before submitting again.
  if(typeof b.total!=='number'||Math.round(b.total*100)!==Math.round(total*100))return {status:409,body:{error:'price_changed',total}};
  const c=code(),tracking=await digest(c+'|'+p),at=new Date().toISOString(),history=[{status:'new',at}];
- const order={customer_name:name,customer_phone:'0'+p,customer_address:address,notes:notes||null,total,items,code:c,tracking_id:tracking,status:'new',created_at:at,updated_at:at,history,notification_pending:true};
- try{await db(env,':commit','POST',{writes:[{update:{name:NAME+'/orders/'+id,fields:fields(order)},currentDocument:{exists:false}},{update:{name:NAME+'/tracking/'+tracking,fields:fields({order_id:id,status:'new',total,created_at:at,history})},currentDocument:{exists:false}},{verify:NAME+'/store_public/appearance',currentDocument:appearance?{updateTime:appearance.updateTime}:{exists:false}},...versions.map(d=>({verify:d.name,currentDocument:{updateTime:d.updateTime}}))]});}catch(e){if([409,412].includes(e.status)){existing=await get(env,'orders/'+id);if(existing)return {status:200,body:{ok:true,orderCode:existing.data.code,total:existing.data.total}};}if([409,412].includes(e.status))return {status:409,body:{error:'catalog_changed'}};throw e;}
- ctx.waitUntil(notify(env,id).catch(()=>{}));return {status:201,body:{ok:true,orderCode:c,total}};
+ const deliveryFields=delivery.policy.enabled?{pricing_version:2,subtotal,delivery_fee:quote.fee_cents/100,delivery_policy_version:delivery.policy.version,delivery_zone_id:quote.zone.id,delivery_zone_name:quote.zone.name,delivery_eta_min:quote.zone.eta_min,delivery_eta_max:quote.zone.eta_max}:{};
+ const publicAmounts=delivery.policy.enabled?{pricing_version:2,subtotal,delivery_fee:quote.fee_cents/100}:{};
+ const order={customer_name:name,customer_phone:'0'+p,customer_address:address,notes:notes||null,total,...deliveryFields,items,code:c,tracking_id:tracking,status:'new',created_at:at,updated_at:at,history,notification_pending:true};
+ try{await db(env,':commit','POST',{writes:[{update:{name:NAME+'/orders/'+id,fields:fields(order)},currentDocument:{exists:false}},{update:{name:NAME+'/tracking/'+tracking,fields:fields({order_id:id,status:'new',total,...publicAmounts,created_at:at,history})},currentDocument:{exists:false}},{verify:NAME+'/store_public/appearance',currentDocument:appearance?{updateTime:appearance.updateTime}:{exists:false}},{verify:NAME+'/'+POLICY_PATH,currentDocument:delivery.snapshot?{updateTime:delivery.snapshot.updateTime}:{exists:false}},...versions.map(d=>({verify:d.name,currentDocument:{updateTime:d.updateTime}}))]});}catch(e){if([409,412].includes(e.status)){existing=await get(env,'orders/'+id);if(existing)return {status:200,body:orderResult(existing.data,true)};}if([409,412].includes(e.status))return {status:409,body:{error:'catalog_changed'}};throw e;}
+ ctx.waitUntil(notify(env,id).catch(()=>{}));return {status:201,body:orderResult(order)};
 }
 export async function notifyRequest(request,env,ctx){
  const token=request.headers.get('Authorization')?.replace(/^Bearer /,'');if(!token)return {status:401,body:{error:'auth_required'}};

@@ -1,3 +1,4 @@
+import {EMPTY_DELIVERY_POLICY,validateDeliveryPolicy,type DeliveryPolicy} from '../../shared/deliveryPolicy.js';
 import {reviewIssues} from "./productReview";
 import {isStoredProductPhotoUrl,productPhotoIdentity} from "./productPhotoMatching";
 import {derivedVisibility, eligibleForDisplay, importVisibility} from "./productVisibility";
@@ -52,6 +53,8 @@ export type OrderPayload = {
   notes: string | null;
   total: number;
   items: OrderItem[];
+  delivery_policy_version?: string;
+  delivery_zone_id?: string;
 };
 
 export type StoreOrder = OrderPayload & {
@@ -61,11 +64,17 @@ export type StoreOrder = OrderPayload & {
   expected_at?: string | null;
   history?: StatusEvent[];
   created_at: string;
+  pricing_version?: number;
+  subtotal?: number;
+  delivery_fee?: number;
+  delivery_zone_name?: string;
+  delivery_eta_min?: number;
+  delivery_eta_max?: number;
 };
 
 export type PlaceOrderResult =
-  | { ok: true; orderCode: string }
-  | { ok: false; reason: "not_configured" | "error" | "catalog_changed"; message?: string };
+  | { ok: true; orderCode: string; pricing_version?:number; subtotal?:number; delivery_fee?:number; total?:number; recovered?:boolean }
+  | { ok: false; reason: "not_configured" | "error" | "catalog_changed" | "delivery_changed"; message?: string };
 
 export function normalizePhone(value: string): string {
   return value.replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/[^0-9]/g, "").replace(/^(0020|20)/, "").replace(/^0/, "");
@@ -78,7 +87,7 @@ export async function trackingKey(code: string, phone: string): Promise<string> 
 }
 
 export type StatusEvent = { status: StoreOrder["status"]; at: string };
-export type OrderTracking = { status: StoreOrder["status"]; total: number; created_at: string; expected_at?: string | null; history?: StatusEvent[] };
+export type OrderTracking = { status: StoreOrder["status"]; total: number; created_at: string; expected_at?: string | null; history?: StatusEvent[]; pricing_version?:number;subtotal?:number;delivery_fee?:number };
 
 export async function lookupOrder(code: string, phone: string): Promise<OrderTracking | null> {
   const ctx = ensure();
@@ -86,7 +95,7 @@ export async function lookupOrder(code: string, phone: string): Promise<OrderTra
   const snap = await getDocFromServer(doc(ctx.db, "tracking", await trackingKey(code, phone)));
   if (!snap.exists()) return null;
   const data = snap.data();
-  return { status: data.status, total: data.total, created_at: data.created_at, expected_at: data.expected_at, history: data.history };
+  return { status: data.status, total: data.total, created_at: data.created_at, expected_at: data.expected_at, history: data.history,pricing_version:data.pricing_version,subtotal:data.subtotal,delivery_fee:data.delivery_fee };
 }
 
 export async function placeOrder(payload: OrderPayload): Promise<PlaceOrderResult> {
@@ -96,15 +105,35 @@ export async function placeOrder(payload: OrderPayload): Promise<PlaceOrderResul
     const fingerprint = JSON.stringify(payload);
     let pending: {fingerprint:string;request_id:string} | null = null;
     try { pending=JSON.parse(sessionStorage.getItem("pending-order")||"null"); } catch {}
-    if (!pending || pending.fingerprint!==fingerprint) pending={fingerprint,request_id:crypto.randomUUID()};
+    // One checkout intent keeps its request ID through price/policy review and uncertain network outcomes.
+    if (!pending || !/^[0-9a-f-]{36}$/i.test(pending.request_id||"")) pending={fingerprint,request_id:crypto.randomUUID()};
+    else pending={...pending,fingerprint};
     sessionStorage.setItem("pending-order",JSON.stringify(pending));
     const response=await fetch("https://oneforallgood-assistant.oneforallgood-store.workers.dev/orders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...payload,request_id:pending.request_id})});
     const result=await response.json();
+    if (!response.ok && ["delivery_policy_changed","delivery_area_required"].includes(result.error)) return {ok:false,reason:"delivery_changed",message:"إعدادات التوصيل اتغيرت. اختار منطقتك وراجع الإجمالي قبل التأكيد."};
     if (!response.ok && ["product_unavailable", "catalog_changed", "price_changed"].includes(result.error)) return {ok:false,reason:"catalog_changed",message:"السعر أو التوفر اتغير. راجع السلة المحدثة قبل التأكيد."};
     if (!response.ok) throw new Error(result.error==="store_closed"?"استقبال الطلبات متوقف مؤقتًا. حاول لاحقًا.":result.error==="settings_unavailable"?"تعذر التحقق من حالة المتجر. حاول لاحقًا.":result.error==="product_unavailable"||result.error==="catalog_changed"?"منتج في السلة لم يعد متاحًا أو اتغير. حدث المتجر وراجع السلة قبل التأكيد.":result.error==="price_changed"?"سعر منتج اتغير. حدث المتجر وراجع إجمالي السلة قبل التأكيد.":response.status===429?"استنى دقيقة قبل إرسال طلب جديد.":"تعذر إرسال الطلب. راجع البيانات وجرب تاني، أو كلم الصيدلية.");
     sessionStorage.removeItem("pending-order");
-    return {ok:true,orderCode:result.orderCode};
+    return {ok:true,orderCode:result.orderCode,total:result.total,pricing_version:result.pricing_version,subtotal:result.subtotal,delivery_fee:result.delivery_fee,recovered:result.recovered};
   } catch(error) {return {ok:false,reason:"error",message:error instanceof Error?error.message:"تعذر إرسال الطلب"};}
+}
+export async function readDeliveryPolicy(owner=false):Promise<DeliveryPolicy>{
+ return deliveryRequest(owner?'GET_OWNER':'GET');
+}
+export async function saveDeliveryPolicy(policy:Omit<DeliveryPolicy,'version'>,expectedVersion:string):Promise<DeliveryPolicy>{
+ return deliveryRequest('PUT',{...policy,expected_version:expectedVersion});
+}
+async function deliveryRequest(mode:'GET'|'GET_OWNER'|'PUT',body?:unknown):Promise<DeliveryPolicy>{
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
+ try{
+  const headers:Record<string,string>={};if(mode!=='GET'){const user=ensure()?.auth.currentUser;if(!user)throw new Error('سجل الدخول بحساب إدارة المتجر.');headers.Authorization='Bearer '+await user.getIdToken();}
+  if(mode==='PUT')headers['Content-Type']='application/json';
+  const response=await fetch('https://oneforallgood-assistant.oneforallgood-store.workers.dev/'+(mode==='GET'?'delivery-policy':'admin/delivery-policy'),{method:mode==='PUT'?'PUT':'GET',headers,body:body?JSON.stringify(body):undefined,signal:controller.signal});
+  const data=await response.json();if(!response.ok)throw new Error(response.status===409?'الإعدادات اتغيرت من جلسة تانية. أعد تحميلها وراجع تعديلاتك قبل الحفظ.':response.status===401||response.status===403?'الجلسة انتهت أو الحساب غير مخوّل. سجل الدخول بحساب المالك.':response.status===429?'انتظر دقيقة قبل محاولة الحفظ أو التحميل مرة تانية.':'تعذر قراءة أو تأكيد حفظ إعدادات التوصيل. أعد تحميلها قبل المحاولة.');
+  if(typeof data.policy?.version!=='string')throw new Error('استجابة غير صالحة لإعدادات التوصيل.');
+  return {...validateDeliveryPolicy({enabled:data.policy.enabled,zones:data.policy.zones}),version:data.policy.version};
+ }catch(error){if(controller.signal.aborted)throw new Error('انتهت مهلة إعدادات التوصيل. أعد تحميلها للتأكد قبل المحاولة.');throw error;}finally{clearTimeout(timer);}
 }
 async function requestOrderNotification(orderId:string) {
   const ctx=ensure();const user=ctx?.auth.currentUser;if(!user)return;

@@ -11,6 +11,7 @@ async function scenario(options={}){
  const original=globalThis.fetch,calls=[],background=[];globalThis.fetch=async(url,init)=>{calls.push({url,body:init?.body});
   if(url.includes('oauth2.googleapis.com'))return Response.json({access_token:'qa-token'});
   if(url.endsWith('/orders/web-'+await (await import('../worker/orders.js')).digest(payload.request_id)))return options.existing?Response.json({fields:fields({code:'QAEXISTING',total:25}),updateTime:'2026-01-01T00:00:00Z'}):Response.json({}, {status:404});
+  if(url.endsWith('/store_private/delivery_policy'))return Response.json({}, {status:404});
   if(url.endsWith('/store_public/appearance'))return options.readFails?Response.json({}, {status:500}):options.missing?Response.json({}, {status:404}):Response.json({fields:fields({accepting_orders:!options.closed}),updateTime:'2026-11-21T00:00:00Z'});
   if(url.endsWith(':batchGet'))return Response.json([{found:{name:'projects/one-for-all-good/databases/(default)/documents/products/fixture',updateTime:options.missingVersion?undefined:'2026-11-22T03:00:00Z',fields:fields({name:'Fixture',price:25,public_visible:true,advertising_status:'approved',content_review_status:'reviewed',prescription_status:'not_medicine',stock_quantity:10,...options.product})}}]);
   if(url.endsWith(':commit'))return options.commitConflict?Response.json({error:{status:'FAILED_PRECONDITION'}},{status:412}):Response.json({});

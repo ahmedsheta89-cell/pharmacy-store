@@ -1,9 +1,10 @@
+import {deliveryQuote,type DeliveryPolicy} from '../../shared/deliveryPolicy.js';
 import {useStoreAppearance} from "../lib/appearance";
 import { useEffect, useRef, useState } from "react";
 import { useCart, type CartLine } from "../lib/cart";
 import { cartTotal, reconcileCart, type CartChange } from "../lib/cartReconciliation";
 import { formatPrice } from "../lib/catalog";
-import { getPublicProduct, placeOrder } from "../lib/firebase";
+import { getPublicProduct, placeOrder, readDeliveryPolicy } from "../lib/firebase";
 import { normalizeCheckoutPhone } from "../lib/checkoutPhone";
 import { STORE } from "../lib/site";
 import ProductImage from "./ProductImage";
@@ -24,11 +25,17 @@ export default function CartDrawer() {
   const [form, setForm] = useState({ name: "", phone: "", address: "", notes: "" });
   const [checking, setChecking] = useState(false);
   const [changes, setChanges] = useState<CartChange[]>([]);
+  const [policy,setPolicy]=useState<DeliveryPolicy|null>(null),[zoneId,setZoneId]=useState(''),[policyNotice,setPolicyNotice]=useState('');
+  const [receipt,setReceipt]=useState<{total:number;subtotal?:number;delivery_fee?:number;pricing_version?:number;recovered?:boolean}|null>(null);
+  const policyRef=useRef(policy),zoneRef=useRef(zoneId);policyRef.current=policy;zoneRef.current=zoneId;
+  let shownQuote:ReturnType<typeof deliveryQuote>|null=null;
+  try{if(policy)shownQuote=deliveryQuote(policy,zoneId,Math.round(total*100));}catch{}
+  const shownTotal=shownQuote?shownQuote.total_cents/100:total;
   const checkingRef = useRef(false), sendingRef = useRef(false), reviewEpoch = useRef(0);
   const current = useRef({ lines, open, accepting });
   current.current = { lines, open, accepting };
 
-  async function reviewCart(): Promise<CartLine[] | null> {
+  async function reviewCart(): Promise<{lines:CartLine[];policy:DeliveryPolicy} | null> {
     if (checkingRef.current || !current.current.open) return null;
     const snapshot = current.current.lines, signature = JSON.stringify(snapshot), epoch = reviewEpoch.current;
     if (!snapshot.length) return null;
@@ -39,26 +46,32 @@ export default function CartDrawer() {
     checkingRef.current = true; setChecking(true); setError("");
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const products = await Promise.race([
-        Promise.all(snapshot.map(async line => {
+      const [products,freshPolicy] = await Promise.race([
+        Promise.all([Promise.all(snapshot.map(async line => {
           try { return await getPublicProduct(line.product.id); }
           catch (error) {
             if ((error as {code?:string})?.code === "permission-denied") return null;
             throw error;
           }
-        })),
+        })),readDeliveryPolicy()]),
         new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("timeout")), 15000); }),
       ]);
       if (!current.current.open || epoch !== reviewEpoch.current) return null;
       if (JSON.stringify(current.current.lines) !== signature) {
         setError("السلة اتغيرت أثناء المراجعة. راجعها واضغط مرة تانية."); return null;
       }
+      const priorPolicy=policyRef.current;
+      const policyChanged=!!priorPolicy&&priorPolicy.version!==freshPolicy.version&&(priorPolicy.enabled||freshPolicy.enabled);
+      setPolicy(freshPolicy);
+      if(!freshPolicy.zones.some(zone=>zone.id===zoneRef.current))setZoneId('');
       const result = reconcileCart(snapshot, products);
       if (JSON.stringify(result.lines) !== signature) replaceLines(result.lines);
-      if (result.changes.length) {
-        setChanges(result.changes); setStage("cart"); return null;
+      if (result.changes.length || policyChanged) {
+        if(result.changes.length)setChanges(result.changes);
+        if(policyChanged)setPolicyNotice('إعدادات التوصيل اتغيرت. راجع المنطقة والرسوم والإجمالي قبل التأكيد.');
+        setStage("cart"); return null;
       }
-      return result.lines;
+      return {lines:result.lines,policy:freshPolicy};
     } catch {
       if (current.current.open && epoch === reviewEpoch.current) setError("تعذر تحديث السعر والتوفر. سلتك وبياناتك محفوظة، تحقق من الاتصال وحاول تاني.");
       return null;
@@ -74,8 +87,9 @@ export default function CartDrawer() {
   async function beginCheckout() {
     if (sendingRef.current || !current.current.accepting) return;
     const reviewed = await reviewCart();
-    if (reviewed?.length && current.current.open && current.current.accepting) {
-      setChanges([]); setStage("checkout");
+    if (reviewed?.lines.length && current.current.open && current.current.accepting) {
+      try{deliveryQuote(reviewed.policy,zoneRef.current,Math.round(cartTotal(reviewed.lines)*100));}catch{setError('اختار منطقة التوصيل من القائمة. لو منطقتك مش موجودة، تواصل مع الصيدلية الأول.');return;}
+      setChanges([]);setPolicyNotice(''); setStage("checkout");
     }
   }
 
@@ -97,7 +111,9 @@ export default function CartDrawer() {
     if (!/^(\+?20)?0?1[0-9]{9}$/.test(phone)) return setError("رقم الموبايل غير صحيح. اكتب الرقم كاملًا مثل 01012345678.");
     if (form.address.trim().length < 8) return setError("اكتب عنوانًا أوضح للتوصيل (منطقة وشارع ورقم).");
     const reviewed = await reviewCart();
-    if (!reviewed?.length || !current.current.open || !current.current.accepting) return;
+    if (!reviewed?.lines.length || !current.current.open || !current.current.accepting) return;
+    let quote:ReturnType<typeof deliveryQuote>;
+    try{quote=deliveryQuote(reviewed.policy,zoneRef.current,Math.round(cartTotal(reviewed.lines)*100));}catch{setStage('cart');setError('اختار منطقة التوصيل وراجع الإجمالي قبل التأكيد.');return;}
     sendingRef.current = true;
     setSending(true);
     const result = await placeOrder({
@@ -105,8 +121,10 @@ export default function CartDrawer() {
       customer_phone: phone,
       customer_address: form.address.trim(),
       notes: form.notes.trim() || null,
-      total: cartTotal(reviewed),
-      items: reviewed.map((line) => ({
+      total: quote.total_cents/100,
+      delivery_policy_version:reviewed.policy.version,
+      delivery_zone_id:reviewed.policy.enabled?zoneRef.current:undefined,
+      items: reviewed.lines.map((line) => ({
         product_id: line.product.id,
         product_name: line.product.name,
         unit_price: line.product.price,
@@ -116,10 +134,11 @@ export default function CartDrawer() {
     sendingRef.current = false;
     setSending(false);
     if (result.ok) {
+      setReceipt({total:result.total??quote.total_cents/100,subtotal:result.subtotal,delivery_fee:result.delivery_fee,pricing_version:result.pricing_version,recovered:result.recovered});
       setOrderCode(result.orderCode);
       setStage("done");
       clear();
-    } else if (result.reason === "catalog_changed") {
+    } else if (result.reason === "catalog_changed" || result.reason === "delivery_changed") {
       await reviewCart();
       setStage("cart");
       setError(result.message || "السعر أو التوفر اتغير. راجع السلة قبل التأكيد.");
@@ -158,6 +177,12 @@ export default function CartDrawer() {
             {change.name}: {change.kind === "price" ? `السعر اتغير من ${formatPrice(change.before!)} إلى ${formatPrice(change.after!)}.` : change.kind === "quantity" ? `الكمية المتاحة اتغيرت من ${change.before} إلى ${change.after}.` : change.kind === "identity" ? "بيانات العبوة اتغيرت، اتشالت من السلة. راجع المنتج وأضفه من جديد لو مناسب." : "لم يعد متاحًا للطلب واتشال من السلة."}
           </li>)}</ul>
         </section>}
+        {stage !== "done" && policy?.enabled && <section className="mx-4 mt-3 rounded-xl border border-brand-100 bg-brand-50 p-3 text-sm text-brand-950">
+          <label className="block font-bold">منطقة التوصيل<select aria-label="منطقة التوصيل" disabled={checking||sending} value={zoneId} onChange={event=>{setZoneId(event.target.value);setError('')}} className="mt-2 w-full rounded-xl border border-brand-100 bg-white p-2.5 text-sm text-brand-950"><option value="">اختار منطقتك</option>{policy.zones.map(zone=><option key={zone.id} value={zone.id}>{zone.name}</option>)}</select></label>
+          {shownQuote?.zone&&<><p className="mt-2">رسوم التوصيل: {formatPrice(shownQuote.fee_cents!/100)}</p><p className="mt-1 text-xs leading-6">مدة تقديرية: {shownQuote.zone.eta_min} إلى {shownQuote.zone.eta_max} دقيقة بعد تأكيد الصيدلية وتوفر الأصناف.</p></>}
+          <p className="mt-2 text-xs leading-6">المنطقة مش في القائمة؟ <a className="font-bold underline" href={`tel:${STORE.whatsappNumber}`}>كلم الصيدلية</a>. راجع أن عنوانك داخل المنطقة المختارة.</p>
+        </section>}
+        {stage !== 'done'&&policyNotice&&<p role="status" className="mx-4 mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-950">{policyNotice}</p>}
         {stage === "cart" && error && <p role="alert" className="mx-4 mt-3 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-700">{error}</p>}
         {stage === "cart" && (
           <>
@@ -201,11 +226,11 @@ export default function CartDrawer() {
             {lines.length > 0 && (
               <footer className="border-t border-brand-100 px-5 py-4">
                 <div className="mb-1 flex items-center justify-between text-sm text-slate-500">
-                  <span>تكلفة التوصيل</span><span className="font-bold text-brand-700">بتتأكد مع الصيدلية</span>
+                  <span>تكلفة التوصيل</span><span className="font-bold text-brand-700">{policy?.enabled?(shownQuote?formatPrice(shownQuote.fee_cents!/100):"اختار المنطقة أولًا"):"بتتأكد مع الصيدلية"}</span>
                 </div>
                 <div className="mb-4 flex items-center justify-between">
                   <span className="font-bold text-brand-950">الإجمالي</span>
-                  <span className="text-xl font-black text-brand-950">{formatPrice(total)}</span>
+                  <span className="text-xl font-black text-brand-950">{policy?.enabled&&!shownQuote?"بعد اختيار المنطقة":formatPrice(shownTotal)}</span>
                 </div>
                 <button disabled={!accepting || checking || sending} onClick={() => void beginCheckout()} className="w-full rounded-xl bg-brand-700 py-3.5 text-sm font-bold text-white shadow-md hover:bg-brand-800">
                   إتمام الطلب - الدفع عند الاستلام
@@ -238,10 +263,11 @@ export default function CartDrawer() {
             {error && <p className="mt-3 rounded-xl bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-700">{error}</p>}
             <div className="mt-auto pt-4">
               <div className="mb-3 flex items-center justify-between rounded-xl bg-brand-50 px-4 py-3">
-                <span className="text-sm font-bold text-slate-600">إجمالي المنتجات - الدفع عند الاستلام</span>
-                <span className="text-lg font-black text-brand-700">{formatPrice(total)}</span>
+                <span className="text-sm font-bold text-slate-600">{policy?.enabled?"المنتجات + التوصيل - عند الاستلام":"إجمالي المنتجات - الدفع عند الاستلام"}</span>
+                <span className="text-lg font-black text-brand-700">{policy?.enabled&&!shownQuote?"اختار المنطقة":formatPrice(shownTotal)}</span>
               </div>
-              <p className="text-xs leading-6 text-slate-500">المبلغ المعروض للمنتجات. التوفر وأي تكلفة توصيل بيتأكدوا معاك قبل تنفيذ الطلب. أي دواء يحتاج وصفة بيُراجع مع الصيدلي.</p>
+              {policy?.enabled&&<p className="mb-2 text-xs text-slate-500">قيمة المنتجات: {formatPrice(total)}. التوصيل: {shownQuote?formatPrice(shownQuote.fee_cents!/100):'اختار المنطقة'}.</p>}
+              <p className="text-xs leading-6 text-slate-500">{policy?.enabled?'الإجمالي يشمل التوصيل للمنطقة المختارة. التوفر والعنوان بيتراجعوا قبل التنفيذ، وموعد التوصيل تقديري بعد التأكيد.':'المبلغ المعروض للمنتجات. التوفر وأي تكلفة توصيل بيتأكدوا معاك قبل تنفيذ الطلب.'} أي دواء يحتاج وصفة بيُراجع مع الصيدلي.</p>
               <button type="submit" disabled={sending||checking||!accepting} className="w-full rounded-xl bg-brand-700 py-3.5 text-sm font-bold text-white shadow-md hover:bg-brand-800 disabled:opacity-60">
                 {checking ? "جارٍ مراجعة السعر والتوفر..." : sending ? "جارٍ إرسال الطلب..." : "تأكيد الطلب"}
               </button>
@@ -259,7 +285,9 @@ export default function CartDrawer() {
             </span>
             <h3 className="text-xl font-black text-brand-950">شكرًا لك! استلمنا طلبك</h3>
             <p className="text-sm text-slate-600">رقم الطلب: <span dir="ltr" className="font-black text-brand-700">{orderCode}</span></p>
-            <p className="text-sm leading-6 text-slate-600">الصيدلية هتتواصل معاك لتأكيد التوفر وإجمالي الطلب وتكلفة التوصيل قبل التنفيذ. الدفع نقدًا عند الاستلام.</p>
+            {receipt?.pricing_version===2&&<dl className="w-full space-y-2 rounded-xl bg-brand-50 p-3 text-sm"><div className="flex justify-between"><dt>قيمة المنتجات</dt><dd>{formatPrice(receipt.subtotal!)}</dd></div><div className="flex justify-between"><dt>التوصيل</dt><dd>{formatPrice(receipt.delivery_fee!)}</dd></div><div className="flex justify-between font-bold"><dt>إجمالي الدفع عند الاستلام</dt><dd>{formatPrice(receipt.total)}</dd></div></dl>}
+            {receipt?.recovered&&<p role="status" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-950">ده الطلب المسجل من محاولة سابقة، مش طلب جديد. لو عدلت بياناتك بعد انقطاع الاتصال، راجعها مع الصيدلية.</p>}
+            <p className="text-sm leading-6 text-slate-600">{receipt?.pricing_version===2?'الصيدلية هتراجع التوفر والعنوان قبل التنفيذ. المبلغ المسجل يشمل التوصيل، والدفع عند الاستلام.':'الصيدلية هتتواصل معاك لتأكيد التوفر وإجمالي الطلب وتكلفة التوصيل قبل التنفيذ. الدفع نقدًا عند الاستلام.'}</p>
             <p className="rounded-xl bg-gold-300/30 p-3 text-sm font-bold text-brand-950">احتفظ بكود الطلب أو صوّر الشاشة. تحتاج الكود ورقم موبايلك لمتابعة الحالة.</p>
             <a href="/track" className="rounded-xl bg-brand-700 px-6 py-3 text-sm font-bold text-white">تتبع طلبي</a>
             <button onClick={close} className="mt-2 rounded-xl bg-brand-700 px-6 py-3 text-sm font-bold text-white hover:bg-brand-800">متابعة التسوق</button>
