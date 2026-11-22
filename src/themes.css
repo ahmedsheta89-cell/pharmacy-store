@@ -113,3 +113,7 @@
 
 .storefront-theme .store-chat-notice{background:var(--raised);color:var(--ink)}
 .storefront-theme .store-chat header{color:#F4EDDE}
+
+.storefront-legacy .store-announcement,.storefront-legacy .store-halo{display:none}
+.storefront-legacy .store-closed-notice,.storefront-legacy .theme-preview-notice{padding:14px 24px;text-align:center;background:#FFF2CE;color:#582F08;font-size:13px;line-height:1.8}
+.storefront-legacy .theme-preview-notice a{text-decoration:underline}

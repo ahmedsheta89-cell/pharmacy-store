@@ -22,7 +22,7 @@ service cloud.firestore {
       allow create, update: if isManager()
         && request.resource.data.keys().hasAll(['theme','accepting_orders','closed_message','seasonal','updated_at','updated_by'])
         && request.resource.data.keys().hasOnly(['theme','accepting_orders','closed_message','seasonal','updated_at','updated_by'])
-        && request.resource.data.theme in ['noir-gold','violet-pop','terracotta-dune','midnight-azure','brutalist-paper','royal-amethyst','ramadan','eid-fitr','eid-adha']
+        && request.resource.data.theme in ['legacy','noir-gold','violet-pop','terracotta-dune','midnight-azure','brutalist-paper','royal-amethyst','ramadan','eid-fitr','eid-adha']
         && validSeasons(request.resource.data.seasonal)
         && request.resource.data.accepting_orders is bool
         && request.resource.data.closed_message is string && request.resource.data.closed_message.size() <= 240

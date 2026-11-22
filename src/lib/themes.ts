@@ -1,7 +1,8 @@
-export const THEME_IDS = ['noir-gold','violet-pop','terracotta-dune','midnight-azure','brutalist-paper','royal-amethyst','ramadan','eid-fitr','eid-adha'] as const;
+export const THEME_IDS = ['legacy','noir-gold','violet-pop','terracotta-dune','midnight-azure','brutalist-paper','royal-amethyst','ramadan','eid-fitr','eid-adha'] as const;
 export type ThemeId = typeof THEME_IDS[number];
-export const DEFAULT_THEME: ThemeId = 'royal-amethyst';
+export const DEFAULT_THEME: ThemeId = 'legacy';
 export const THEMES: {id:ThemeId;name:string;description:string;colors:[string,string,string]}[] = [
+ {id:'legacy',name:'التصميم الحالي',description:'شكل المتجر السابق. محفوظ كاختيار مبدئي لحد ما تختار تصميم جديد.',colors:['#145A46','#D7AE44','#FFFFFF']},
  {id:'noir-gold',name:'Noir Gold',description:'أسود هادئ، ذهبي دافئ وتفاصيل دقيقة',colors:['#0B0B0F','#C9A24B','#F4EDDE']},
  {id:'violet-pop',name:'Violet Pop',description:'بنفسجي جريء، وردي ولمسة ليموني',colors:['#2B0A54','#E7218C','#C8FF3D']},
  {id:'terracotta-dune',name:'Terracotta Dune',description:'رملي دافئ، تراكوتا وحواف طبيعية',colors:['#F7EFE3','#C05B2E','#33231A']},
