@@ -1,6 +1,6 @@
 # Reviewed bulk product photos
 
-Release checkpoint: integrated with the live review/reset fixes and retested with the actual UI/client/Worker/data-layer path and disposable Auth/Firestore. The bulk panel is intentionally hidden in the first single-uploader release. Its separate enablement follows the single-uploader live check. The owner's production session has not been used for QA.
+Release checkpoint: integrated with the live review/reset fixes and retested with the actual UI/client/Worker/data-layer path and disposable Auth/Firestore. The first single-uploader Hosting release passed its deployment and served-bundle check. This second staged Hosting build enables the separately reviewed bulk panel. The owner's production session has not been used for QA.
 
 ## Existing foundations
 
@@ -12,7 +12,7 @@ Release checkpoint: integrated with the live review/reset fixes and retested wit
 
 ## Queue UI
 
-`BulkProductPhotos` is inside the products panel, separate from a single product's editor. The following behavior is implemented locally.
+`BulkProductPhotos` is inside the products panel, separate from a single product's editor. The following behavior is implemented in this release.
 
 1. Explicitly open the batch panel and select files. Selection prepares images locally, it does not upload or save.
 2. Start with at most 50 files and a bounded total input size. Read and compress serially, not with an unbounded Promise.all.
@@ -66,7 +66,7 @@ Keep user-visible Arabic RTL readable at 320/390/1280px, with contained pack pre
 ## Verified local checkpoint, November 22, 2026
 
 - Production build passes, with the existing large main/Excel chunk warning.
-- 58 unit/backend checks and 20 Firestore rules/data-layer checks pass.
+- 70 unit/backend checks and 20 Firestore rules/data-layer checks pass.
 - Synthetic browser checks cover all three widths, review/replacement consent, duplicate targets, bounded 50-image preparation, failure recovery, URL reuse, catalog conflicts, pacing, stop/unmount and object-URL cleanup.
 - Both single-image and three-row bulk actual-code integrations pass with production Firebase SDK 11.10.0. Three different images were saved and rendered again after reload through the actual media handler. A stale third-row image was blocked until refreshed and reviewed. Concurrent price, stock and description changes and manual hiding survived.
 - Image revisions detect app-controlled remove/readd of the same URL, deletion/recreation and stale full-editor overwrites. Price-only edits and workbook imports preserve the revision; changed images receive a new revision. An already-applied photo retry does not undo a later human review. Direct out-of-band writes that omit this metadata are not a universal history guarantee.
@@ -76,6 +76,6 @@ See `PHOTO-UPLOAD.md` for reproducible commands and release checks. The rate-bin
 
 ## Release gate
 
-The local hosting workflow currently deploys only a push to main or manual dispatch. Recheck the live workflow before relying on a branch push being non-deploying. The first single-uploader release must not expose the bulk panel accidentally. Production-owner photo QA remains open. A Hosting preview alone must not be called an isolated backend: verify its Firebase/Worker targets and allowed Origin before offering that route. Do not bypass the stale manager password or change authentication to get a test pass.
+The local hosting workflow currently deploys only a push to main or manual dispatch. Recheck the live workflow before relying on a branch push being non-deploying. The first single-uploader release was checked with its bulk panel absent. The second release enables it only after the integrated build, regression and actual-code checks. Production-owner photo QA remains open. A Hosting preview alone must not be called an isolated backend: verify its Firebase/Worker targets and allowed Origin before offering that route. Do not bypass the stale manager password or change authentication to get a test pass.
 
 Visual AI remains a separate optional step. The exact Qwen account schema and Free REST image path are now verified, including three successful synthetic-image requests. Two clear labels with different strengths/counts were transcribed correctly; an unreadable image returned unknown fields. This is not real-pack accuracy or a store vision feature. See `VISION-FEASIBILITY.md`. No new license, billing or private-image use was enabled.

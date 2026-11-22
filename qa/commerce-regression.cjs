@@ -1,0 +1,60 @@
+// Local real-component regression. Transport is synthetic and all off-host requests are blocked.
+const {chromium}=require('playwright');
+const assert=require('node:assert/strict');
+const {spawn}=require('node:child_process');
+const fs=require('node:fs');
+const path=require('node:path');
+(async()=>{
+ let browser; const cwd=path.resolve(__dirname,'..');const output=fs.openSync('/tmp/commerce-vite.log','w');
+ const server=spawn(path.join(cwd,'node_modules/.bin/vite'),['--config','qa/vite.visual.config.mts','--host','127.0.0.1','--port','5196'],{cwd,stdio:['ignore',output,output]});
+ try {
+  let ready=false;for(let i=0;i<60;i++){try{ready=(await fetch('http://127.0.0.1:5196/')).ok;}catch{}if(ready)break;await new Promise(r=>setTimeout(r,100));}assert.ok(ready);
+  browser=await chromium.launch({headless:true,executablePath:'/opt/google/chrome/chrome',args:['--no-sandbox']});
+  const context=await browser.newContext({viewport:{width:390,height:900}});
+  await context.route('**/*',r=>new URL(r.request().url()).hostname==='127.0.0.1'?r.continue():r.abort());
+  const page=await context.newPage();page.setDefaultTimeout(10000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto('http://127.0.0.1:5196/');
+  await page.waitForFunction(()=>document.querySelectorAll('.store-product-card').length===4);
+  assert.equal(await page.locator('.store-product-card').filter({hasText:'مستلزمات يومية تجريبية'}).count(),0,'manually hidden product excluded');
+  assert.equal(await page.locator('.store-product-card').filter({hasText:'مجموعة عناية تجريبية'}).count(),0,'unreviewed product excluded');
+  await page.getByRole('button',{name:'عناية بالبشرة',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelectorAll('.store-product-card').length===2);
+  await page.getByRole('textbox',{name:'ابحث عن دواء أو منتج…',exact:true}).fill('عبوة ترطيب');
+  await page.waitForFunction(()=>document.querySelectorAll('.store-product-card').length===1);
+  assert.ok(await page.locator('.store-product-card').innerText().then(x=>x.includes('عبوة ترطيب تجريبية')));
+  await page.getByRole('textbox',{name:'ابحث عن دواء أو منتج…',exact:true}).fill('');await page.getByRole('button',{name:'الكل',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelectorAll('.store-product-card').length===4);
+  const card=page.locator('.store-product-card').filter({hasText:'عبوة عناية تجريبية'});
+  assert.equal(await card.locator('img').evaluate(x=>getComputedStyle(x).objectFit),'contain','whole pack is not cropped');
+  await card.getByRole('button',{name:'+ أضف',exact:true}).click();
+  await page.getByRole('button',{name:'سلة التسوق',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'سلة المشتريات'});await dialog.waitFor();
+  await dialog.getByRole('button',{name:'زيادة',exact:true}).click();
+  await page.waitForFunction(()=>JSON.parse(localStorage.getItem('one-for-all-good-cart-v2-reviewed'))?.[0]?.quantity===2);
+  await dialog.getByRole('button',{name:'إغلاق',exact:true}).click();await page.reload();
+  await page.getByRole('button',{name:'سلة التسوق',exact:true}).click();await dialog.waitFor();
+  assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('one-for-all-good-cart-v2-reviewed'))[0].quantity),2,'cart persists reload');
+  await dialog.getByRole('button',{name:'إنقاص',exact:true}).click();await dialog.getByRole('button',{name:'زيادة',exact:true}).click();
+  await dialog.getByRole('button',{name:'إتمام الطلب - الدفع عند الاستلام',exact:true}).click();
+  await dialog.getByLabel('الاسم بالكامل').fill('QA Synthetic Customer');await dialog.getByLabel('رقم الموبايل').fill('invalid');await dialog.getByLabel('عنوان التوصيل').fill('Synthetic QA address, never sent');
+  await dialog.getByRole('button',{name:'تأكيد الطلب',exact:true}).click();await dialog.getByText(/رقم الموبايل غير صحيح/).waitFor();
+  assert.equal(await page.evaluate(()=>globalThis.__checkoutFixture.orders.length),0,'invalid form never reaches order transport');
+  await dialog.getByRole('button',{name:'إغلاق',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('[role=dialog] h2')?.textContent.trim()==='سلة المشتريات');
+  await page.getByRole('button',{name:'سلة التسوق',exact:true}).click();
+  await dialog.getByRole('button',{name:'إتمام الطلب - الدفع عند الاستلام',exact:true}).click();
+  assert.equal(await dialog.getByLabel('الاسم بالكامل').inputValue(),'QA Synthetic Customer','closing cart preserves typed customer fields');
+  await dialog.getByLabel('رقم الموبايل').fill('01012345678');
+  await page.evaluate(()=>globalThis.__appearanceFixture.set({accepting_orders:false}));
+  await page.waitForFunction(()=>Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='تأكيد الطلب'&&b.disabled));
+  assert.equal(await page.evaluate(()=>globalThis.__checkoutFixture.orders.length),0,'closed-store transition blocks submit');
+  await page.evaluate(()=>globalThis.__appearanceFixture.set({accepting_orders:true}));
+  await page.waitForFunction(()=>Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='تأكيد الطلب'&&!b.disabled));
+  for(const width of [320,390,1280]){await page.setViewportSize({width,height:900});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await dialog.screenshot({path:'/downloads/commerce-checkout-'+width+'.png'});}
+  await dialog.getByRole('button',{name:'تأكيد الطلب',exact:true}).click();await dialog.getByText('QA-NOT-REAL',{exact:true}).waitFor();
+  const orders=await page.evaluate(()=>globalThis.__checkoutFixture.orders);assert.equal(orders.length,1);assert.equal(orders[0].total,90);assert.deepEqual(orders[0].items.map(x=>({id:x.product_id,quantity:x.quantity,price:x.unit_price})),[{id:'fixture-0',quantity:2,price:45}]);
+  assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('one-for-all-good-cart-v2-reviewed'))),[],'successful synthetic checkout clears cart');
+  await page.setViewportSize({width:390,height:900});await dialog.screenshot({path:'/downloads/commerce-synthetic-success.png'});assert.deepEqual(errors,[]);
+  console.log('PASS real catalog/search/category/review gates, contained images, persistent cart/quantities, invalid phone, store-close transition, narrow/wide checkout, synthetic order payload and clearing. No production order sent.');
+ } finally {if(browser)await browser.close();server.kill('SIGTERM');await new Promise(r=>server.once('exit',r));fs.closeSync(output);}
+})().catch(e=>{console.error(e);process.exitCode=1;});
