@@ -51,6 +51,7 @@ export default function Tracking() {
           {result.expected_at && Date.parse(result.expected_at)<now && !["delivered","cancelled"].includes(result.status) && <p role="alert" className="mt-3 rounded-xl bg-amber-50 p-3 text-sm leading-7 text-amber-900">الميعاد المتوقع عدى ولسه الطلب مش متسجل تم تسليمه. كلم الصيدلية لمعرفة آخر تحديث. الميعاد تقديري مش ضمان.</p>}
           {!!result.history?.length && <ol aria-label="مراحل الطلب" className="mt-4 space-y-3 border-r-2 border-brand-200 pr-4">{result.history.map((h,i)=><li key={i} className="text-sm"><p className="font-bold">{labels[h.status]}</p><time className="text-xs text-slate-500">{new Date(h.at).toLocaleString("ar-EG",{dateStyle:"short",timeStyle:"short",timeZone:"Africa/Cairo"})}</time></li>)}</ol>}
           <dl className="mt-4 space-y-2 border-t border-brand-100 pt-4 text-sm">
+            {result.pricing_version===2&&<><div className="flex justify-between"><dt>قيمة المنتجات</dt><dd>{formatPrice(result.subtotal!)}</dd></div><div className="flex justify-between"><dt>التوصيل</dt><dd>{formatPrice(result.delivery_fee!)}</dd></div></>}
             <div className="flex justify-between"><dt>الإجمالي</dt><dd className="font-bold">{formatPrice(result.total)}</dd></div>
             <div className="flex justify-between"><dt>تاريخ الطلب</dt><dd>{new Date(result.created_at).toLocaleDateString("ar-EG")}</dd></div>
           </dl>

@@ -40,3 +40,16 @@ test('REST commit rejects product hide racing checkout, with no order/tracking w
  const r=await call(':commit','POST',{writes:[{update:{name:root+'orders/qa-hide-race',fields:{code:{stringValue:'NOT-REAL'}}},currentDocument:{exists:false}},{update:{name:root+'tracking/qa-hide-race',fields:{status:{stringValue:'new'}}},currentDocument:{exists:false}},{verify:root+'products/qa-hide-race',currentDocument:{updateTime:snapshot.updateTime}}]});
  assert.equal((await r.json()).error.status,'FAILED_PRECONDITION');assert.equal((await call('/orders/qa-hide-race')).status,404);assert.equal((await call('/tracking/qa-hide-race')).status,404);
 });
+
+test('delivery policy stays server-only, even for the signed-in owner browser',async()=>{
+ for(const client of [anon,other,owner]){await assertFails(getDoc(doc(client,'store_private/delivery_policy')));await assertFails(setDoc(doc(client,'store_private/delivery_policy'),{version:'forged-policy',enabled:true,zones:[]}));}
+});
+test('REST policy guards support an absent initial policy and reject an edited policy atomically',async()=>{
+ const base='http://127.0.0.1:8086/v1/projects/demo-theme-check/databases/(default)/documents';
+ const call=async(path,method='GET',body)=>fetch(base+path,{method,headers:{Authorization:'Bearer owner','Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+ const root='projects/demo-theme-check/databases/(default)/documents/';
+ const write=id=>({update:{name:root+'orders/'+id,fields:{code:{stringValue:'SYNTHETIC-NOT-REAL'}}},currentDocument:{exists:false}});
+ const initial=await call(':commit','POST',{writes:[write('qa-delivery-absent'),{verify:root+'store_private/delivery_policy',currentDocument:{exists:false}}]});assert.equal(initial.status,200);
+ await call('/store_private/delivery_policy','PATCH',{fields:{version:{stringValue:'qa-version-1'}}});const snapshot=await (await call('/store_private/delivery_policy')).json();await call('/store_private/delivery_policy','PATCH',{fields:{version:{stringValue:'qa-version-2'}}});
+ const stale=await call(':commit','POST',{writes:[write('qa-delivery-race'),{verify:root+'store_private/delivery_policy',currentDocument:{updateTime:snapshot.updateTime}}]});assert.equal((await stale.json()).error.status,'FAILED_PRECONDITION');assert.equal((await call('/orders/qa-delivery-race')).status,404);
+});

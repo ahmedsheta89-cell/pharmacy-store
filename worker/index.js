@@ -1,4 +1,4 @@
-import {createOrder,notifyRequest,sweep} from './orders.js';
+import {createOrder,notifyRequest,sweep,publicDeliveryPolicy,ownerDeliveryPolicy} from './orders.js';
 import {uploadPhoto,servePhoto} from './photos.js';
 const ORIGINS = new Set(['https://one-for-all-good.web.app', 'https://one-for-all-good.firebaseapp.com']);
 const CONTACT = '01018108979';
@@ -7,7 +7,7 @@ function json(body, origin, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: {
     'Content-Type': 'application/json; charset=utf-8',
     'Access-Control-Allow-Origin': ORIGINS.has(origin) ? origin : 'https://one-for-all-good.web.app',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization', 'Vary': 'Origin', 'Cache-Control': 'no-store'
   }});
 }
@@ -29,6 +29,7 @@ export default {
     if (path.startsWith('/media/') && request.method === 'GET') return servePhoto(path.slice(7),env,ctx);
     if (!ORIGINS.has(origin)) return json({error:'origin_not_allowed'}, origin, 403);
     if (request.method === 'OPTIONS') return json({}, origin);
+    if ((path === '/delivery-policy' && request.method === 'GET') || (path === '/admin/delivery-policy' && ['GET','PUT'].includes(request.method))) {try {const result=await (path.startsWith('/admin/')?ownerDeliveryPolicy:publicDeliveryPolicy)(request,env);return json(result.body,origin,result.status);}catch{return json({error:'delivery_policy_unavailable'},origin,503);}}
     if (path === '/photos' && request.method === 'POST') {const result=await uploadPhoto(request,env);return json(result.body,origin,result.status);}
     if (['/orders','/notify'].includes(path) && request.method === 'POST') {try {const result=await (path==='/orders'?createOrder:notifyRequest)(request,env,ctx);return json(result.body,origin,result.status);}catch{return json({error:'service_unavailable'},origin,503);}}
     if (path !== '/chat' || request.method !== 'POST') return json({error:'not_found'}, origin, 404);
