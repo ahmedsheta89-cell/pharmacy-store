@@ -1,3 +1,4 @@
+import {reviewIssues} from "./productReview";
 import {derivedVisibility, eligibleForDisplay, importVisibility} from "./productVisibility";
 import {parseAppearance, isTheme,validSeasons, type StoreAppearance} from "./themes";
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
@@ -211,8 +212,8 @@ export async function upsertProduct(product: StoreProduct): Promise<void> {
   if (!ctx) throw new Error("Firebase غير مهيأ");
   if (!product.name.trim() || !Number.isFinite(product.price) || product.price<0) throw new Error("بيانات المنتج غير صحيحة");
   if (product.stock_quantity!==undefined && (!Number.isInteger(product.stock_quantity)||product.stock_quantity<0)) throw new Error("كمية المخزون لازم تكون عددًا صحيحًا غير سالب");
-  const reviewed=product.content_review_status==="reviewed";
-  if(reviewed && (!product.content_source?.trim()||!product.content_reviewer?.trim()||!product.content_reviewed_at||!product.content_version?.trim())) throw new Error("أكمل المصدر والمراجع والتاريخ والنسخة قبل الاعتماد");
+  const issues=reviewIssues(product);
+  if(issues.length) throw new Error(issues.map(issue=>issue.message).join(" "));
   // Read the latest flag: saving an old editor must not undo a hide from another tab.
   const ref=doc(ctx.db,"products",product.id);
   await runTransaction(ctx.db,async tx=>{
