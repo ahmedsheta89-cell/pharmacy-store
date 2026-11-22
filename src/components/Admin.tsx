@@ -7,6 +7,7 @@ import {
   deleteProductById, seedProducts, setProductHidden, upsertProduct, watchAuth, watchOrders, watchProducts,
   watchFeedback, type OrderFeedback, type StoreOrder, type StoreProduct,
 } from "../lib/firebase";
+import { RESET_REQUEST_ACCEPTED, passwordResetErrorMessage } from "../lib/passwordResetFeedback";
 import { STORE } from "../lib/site";
 import CatalogExcel from "./CatalogExcel";
 import ProductReviewFields from "./ProductReviewFields";
@@ -331,9 +332,9 @@ export default function Admin() {
     setBusy(true);
     try {
       await managerSendPasswordReset(target);
-      setResetMessage("أرسلنا لينك إعادة تعيين كلمة السر إلى بريدك. افتح الرابط واختر كلمة جديدة، ثم عد للدخول.");
-    } catch {
-      setAuthError("تعذّر إرسال لينك إعادة التعيين. تأكد من البريد وحاول مرة أخرى.");
+      setResetMessage(RESET_REQUEST_ACCEPTED);
+    } catch (error) {
+      setAuthError(passwordResetErrorMessage(error));
     }
     setBusy(false);
   };
@@ -378,7 +379,7 @@ export default function Admin() {
               <input type="password" required dir="ltr" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-xl border border-brand-100 px-3 py-2.5 text-left text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100" placeholder="••••••••" />
             </label>
             {authError && <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{authError}</p>}
-            {resetMessage && <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">{resetMessage}</p>}
+            {resetMessage && <p role="status" className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">{resetMessage}</p>}
             <button type="submit" disabled={busy} className="mt-5 w-full rounded-xl bg-brand-700 py-3 text-sm font-bold text-white hover:bg-brand-800 disabled:opacity-60">
               {busy ? "جارٍ الدخول..." : "دخول"}
             </button>
