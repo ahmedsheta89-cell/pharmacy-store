@@ -1,4 +1,4 @@
-export type PhotoCatalogItem={id:string;name?:string;nameEn?:string;unit?:string;category?:string;imageUrl?:string};
+export type PhotoCatalogItem={id:string;name?:string;nameEn?:string;unit?:string;category?:string;imageUrl?:string;image_revision?:string};
 export type PhotoMatch={fileIndex:number;filename:string;kind:'exact_id'|'review'|'unmatched';productId?:string;candidateIds:string[];reason:'exact_id'|'catalog_code_collision'|'duplicate_target'|'name_hint'|'no_match'|'unsafe_filename'|'unknown_extension'};
 
 // Catalog imports currently map SKU/barcode to the document ID. Do not guess a
@@ -13,6 +13,9 @@ export function photoFilenameDisplay(value:string):string{
 }
 export function productPhotoIdentity(product:PhotoCatalogItem):string{
  return JSON.stringify([product.id,product.name||'',product.nameEn||'',product.unit||'',product.category||'']);
+}
+export function canPreviewProductPhotoUrl(value:string):boolean{
+ try{const url=new URL(value);return url.protocol==='https:'&&!url.username&&!url.password;}catch{return false;}
 }
 export function isStoredProductPhotoUrl(value:string):boolean{
  return /^https:\/\/oneforallgood-assistant\.oneforallgood-store\.workers\.dev\/media\/[a-f0-9]{64}$/.test(value);

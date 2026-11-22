@@ -197,6 +197,7 @@ export type StoreProduct = {
   badge?: string;
   description: string;
   imageUrl?: string;
+  image_revision?: string;
   dosage_information?: string;
   usage_instructions?: string;
   warnings?: string;
@@ -228,6 +229,11 @@ export async function getPublicProduct(id:string):Promise<StoreProduct|null>{
  const d=await getDocFromServer(doc(ctx.db,"products",id));if(!d.exists()||d.data().public_visible!==true||!derivedVisibility(d.data()))return null;return {...d.data(),id:d.id} as StoreProduct;
 }
 
+function photoRevision(current:{imageUrl?:unknown;image_revision?:unknown}|undefined,imageUrl?:string):string|undefined{
+ if(!current||String(current.imageUrl||"").trim()!==(imageUrl||"").trim())return crypto.randomUUID();
+ return typeof current.image_revision==="string"?current.image_revision:undefined;
+}
+
 export async function upsertProduct(product: StoreProduct): Promise<void> {
   const ctx = ensure();
   if (!ctx) throw new Error("Firebase غير مهيأ");
@@ -240,7 +246,11 @@ export async function upsertProduct(product: StoreProduct): Promise<void> {
   await runTransaction(ctx.db,async tx=>{
     const current=await tx.get(ref);
     const owner_hidden=current.exists()?current.data().owner_hidden===true:product.owner_hidden===true;
-    const {id,...data}={...product,owner_hidden,public_visible:derivedVisibility({...product,owner_hidden})};
+    // Reject an old editor even when another edit restored the same URL. Its
+    // review flags must not silently reapprove a newer image revision.
+    if(current.exists()&&String(current.data().image_revision||"")!==(product.image_revision||""))throw new Error("صورة الصنف اتغيرت في جلسة أخرى. حدّث المنتج قبل الحفظ حتى لا نستبدل صورة أحدث.");
+    const image_revision=photoRevision(current.exists()?current.data():undefined,product.imageUrl);
+    const {id,...data}={...product,image_revision,owner_hidden,public_visible:derivedVisibility({...product,owner_hidden})};
     tx.set(ref,Object.fromEntries(Object.entries(data).filter(([,value])=>value!==undefined)));
   });
 }
@@ -258,7 +268,7 @@ export async function setProductHidden(id:string,hidden:boolean):Promise<void>{
 
 // Image-only writes preserve concurrent price/content/hide edits and reject a
 // stale image or changed pack identity rather than overwriting newer work.
-export async function assignProductPhoto(input:{productId:string;imageUrl:string;expectedImageUrl:string;expectedIdentity:string}):Promise<void>{
+export async function assignProductPhoto(input:{productId:string;imageUrl:string;expectedImageUrl:string;expectedIdentity:string;expectedImageRevision?:string}):Promise<void>{
  const ctx=ensure();if(!ctx)throw new Error("Firebase غير مهيأ");
  if(!/^[a-zA-Z0-9_-]{1,100}$/.test(input.productId)||!isStoredProductPhotoUrl(input.imageUrl))throw new Error("بيانات ربط الصورة غير صحيحة");
  const ref=doc(ctx.db,"products",input.productId);
@@ -268,8 +278,8 @@ export async function assignProductPhoto(input:{productId:string;imageUrl:string
   if(productPhotoIdentity({...current,id:snap.id})!==input.expectedIdentity)throw new Error("اسم المنتج أو بيانات العبوة اتغيرت. حدّث القائمة وراجع اختيار الصورة.");
   const currentUrl=String(current.imageUrl||"").trim();
   if(currentUrl===input.imageUrl)return; // A retry must not undo a later review.
-  if(currentUrl!==input.expectedImageUrl.trim())throw new Error("صورة المنتج اتغيرت أثناء المراجعة. حدّث القائمة وراجع الاستبدال.");
-  tx.update(ref,{imageUrl:input.imageUrl,content_review_status:"unreviewed",public_visible:false});
+  if(currentUrl!==input.expectedImageUrl.trim()||String(current.image_revision||"")!==(input.expectedImageRevision||""))throw new Error("صورة المنتج اتغيرت أثناء المراجعة. حدّث القائمة وراجع الاستبدال.");
+  tx.update(ref,{imageUrl:input.imageUrl,image_revision:crypto.randomUUID(),content_review_status:"unreviewed",public_visible:false});
  });
 }
 
@@ -342,7 +352,7 @@ export async function bulkImportProducts(products:StoreProduct[],onProgress:(sav
   const chunk=products.slice(i,i+200),refs=chunk.map(p=>doc(ctx.db,"products",p.id));
   await runTransaction(ctx.db,async tx=>{
    const current=await Promise.all(refs.map(ref=>tx.get(ref)));
-   chunk.forEach((p,n)=>{const {id,...data}=p;tx.set(refs[n],Object.fromEntries(Object.entries({...data,...importVisibility(current[n].exists()?current[n].data():undefined)}).filter(([,v])=>v!==undefined)));});
+   chunk.forEach((p,n)=>{const {id,...data}=p;tx.set(refs[n],Object.fromEntries(Object.entries({...data,...importVisibility(current[n].exists()?current[n].data():undefined),image_revision:photoRevision(current[n].exists()?current[n].data():undefined,p.imageUrl)}).filter(([,v])=>v!==undefined)));});
   });
   saved+=chunk.length;onProgress(saved);
  }}

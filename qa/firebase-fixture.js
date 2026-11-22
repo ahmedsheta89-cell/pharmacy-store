@@ -22,14 +22,28 @@ export const lookupOrder=async()=>({status:'preparing',total:125,created_at:new 
 globalThis.__appearanceFixture={set(value){appearance={...appearance,...value};localStorage.setItem('qa-appearance',JSON.stringify(appearance));appearanceListeners.forEach(cb=>cb(appearance));}};
 
 // Synthetic-only photo transport. It never contacts the deployed Worker.
-globalThis.__photoFixture={mode:'success',last:null};
+import {productPhotoIdentity} from '/src/lib/productPhotoMatching.ts';
+globalThis.__bulkPhotoFixture={mode:'success',attempts:[],links:[],set(id,values){const p=products.find(p=>p.id===id);if(Object.hasOwn(values,'imageUrl')&&values.imageUrl!==p.imageUrl)p.image_revision=crypto.randomUUID();Object.assign(p,values);productListeners.forEach(cb=>cb());},remove(id){const i=products.findIndex(p=>p.id===id);if(i>=0)products.splice(i,1);productListeners.forEach(cb=>cb());},snapshot(){return products.map(p=>({...p}));}};
+export const assignProductPhoto=async input=>{
+ const mode=globalThis.__bulkPhotoFixture.mode;globalThis.__bulkPhotoFixture.attempts.push({...input});
+ if(mode==='slow-save')await new Promise(resolve=>setTimeout(resolve,1000));
+ if(mode==='save-error')throw new Error('تعذر حفظ الربط التجريبي. الصورة المرفوعة محفوظة للمحاولة التالية.');
+ const p=products.find(p=>p.id===input.productId);if(!p)throw new Error('المنتج لم يعد موجودًا');
+ if(productPhotoIdentity(p)!==input.expectedIdentity)throw new Error('بيانات العبوة اتغيرت');
+ if(p.imageUrl===input.imageUrl)return;
+ if((p.imageUrl||'')!==input.expectedImageUrl||(p.image_revision||'')!==(input.expectedImageRevision||''))throw new Error('صورة المنتج اتغيرت');
+ p.imageUrl=input.imageUrl;p.image_revision=crypto.randomUUID();p.content_review_status='unreviewed';p.public_visible=false;globalThis.__bulkPhotoFixture.links.push({...input});productListeners.forEach(cb=>cb());
+ if(mode==='lost-response')throw new Error('انقطع تأكيد الحفظ التجريبي، راجع الحالة قبل التكرار.');
+};
+globalThis.__photoFixture={mode:'success',last:null,calls:[]};
 products[0].imageUrl='/qa/fixtures/product-photo.jpg';
 export const uploadProductPhoto=async(blob,signal)=>{
+  const call=globalThis.__photoFixture.calls.length+1;globalThis.__photoFixture.calls.push({at:performance.now(),size:blob.size});
   const bitmap=await createImageBitmap(blob);const bytes=new Uint8Array(await blob.arrayBuffer());const canvas=document.createElement('canvas');canvas.width=bitmap.width;canvas.height=bitmap.height;const ctx=canvas.getContext('2d');ctx.drawImage(bitmap,0,0);globalThis.__photoFixture.last={type:blob.type,size:blob.size,width:bitmap.width,height:bitmap.height,corner:Array.from(ctx.getImageData(0,0,1,1).data),metadataStripped:!new TextDecoder().decode(bytes).includes('QA-GEO-MARKER')};bitmap.close();
   await new Promise(resolve=>setTimeout(resolve,globalThis.__photoFixture.mode==='slow'?1200:250));
   if(signal?.aborted)throw new Error('Synthetic cancelled upload');
   if(globalThis.__photoFixture.mode==='error')throw new Error('وصلت الخدمة المجانية لحد الاستخدام. حاول لاحقًا.');
-  return location.origin+'/qa/fixtures/product-photo.jpg';
+  return location.origin+'/qa/fixtures/product-photo.jpg?upload='+call;
 };
 // Never permit a visual fixture to call a production mutation, even accidentally.
 const blocked=async()=>{throw new Error('Visual QA mutation is disabled');};

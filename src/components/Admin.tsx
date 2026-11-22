@@ -11,6 +11,7 @@ import { RESET_REQUEST_ACCEPTED, passwordResetErrorMessage } from "../lib/passwo
 import { STORE } from "../lib/site";
 import CatalogExcel from "./CatalogExcel";
 import ProductReviewFields from "./ProductReviewFields";
+import BulkProductPhotos from "./BulkProductPhotos";
 import ProductPhotoField from "./ProductPhotoField";
 import BannersPanel from "./BannersPanel";
 
@@ -91,6 +92,8 @@ function ProductsPanel() {
   const [editing, setEditing] = useState<StoreProduct | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [photoPending, setPhotoPending] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [excelBusy, setExcelBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -226,12 +229,13 @@ function ProductsPanel() {
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-bold text-slate-600">عدد المنتجات: {products.length} · الظاهر للعملاء: {products.filter(p=>p.public_visible&&p.owner_hidden!==true&&eligibleForDisplay(p)).length}</p>
-        <button onClick={startAdd} className="rounded-xl bg-brand-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-800">+ إضافة منتج</button>
+        <button disabled={busy||bulkBusy||excelBusy} onClick={startAdd} className="rounded-xl bg-brand-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-800 disabled:opacity-50">+ إضافة منتج</button>
       </div>
       {error && <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{error}</p>}
       <p className="mb-3 text-sm leading-7 text-slate-600">تحكم في ظهور كل منتج من زر إظهار / إخفاء. الإخفاء لا يحذف المنتج. الإظهار يلغي الإخفاء اليدوي فقط؛ الظهور للعملاء يحتاج أيضًا اعتماد المراجعة والسماح بالإعلان وتصنيف المنتج.</p>
       {notice && <p role="status" className="mb-3 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
-      <CatalogExcel products={products}/>
+      <BulkProductPhotos products={products} disabled={busy||excelBusy||toggling!==null} onBusyChange={setBulkBusy}/>
+      <fieldset disabled={bulkBusy} className="min-w-0"><CatalogExcel products={products} onBusyChange={setExcelBusy}/></fieldset>
       {products.length === 0 ? (
         <div className="rounded-2xl border border-brand-100 bg-white p-10 text-center">
           <p className="font-black text-brand-950">لا توجد منتجات في قاعدة البيانات بعد</p>
@@ -248,9 +252,9 @@ function ProductsPanel() {
                 {!eligibleForDisplay(product)&&<p className="mt-1 text-xs leading-6 text-amber-800">قبل الإظهار: اعتمد المراجعة والسماح بالإعلان، وحدد تصنيف المنتج من «تعديل».</p>}
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
-                <button type="button" disabled={busy||toggling!==null} onClick={()=>void toggle(product)} aria-label={`${product.owner_hidden===true?"إظهار":"إخفاء"} ${product.name}`} title={!eligibleForDisplay(product)?"يمكن تغيير الإخفاء اليدوي. النشر للعملاء ينتظر اعتماد المنتج.":undefined} className={`min-w-20 rounded-xl border px-3.5 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50 ${product.owner_hidden!==true?"border-amber-200 bg-amber-50 text-amber-900":"border-emerald-200 bg-emerald-50 text-emerald-800"}`}>{toggling===product.id?"جارٍ الحفظ...":product.owner_hidden===true?"إظهار":"إخفاء"}</button>
-                <button disabled={busy||toggling!==null} onClick={() => startEdit(product)} className="rounded-xl border border-brand-100 px-3.5 py-2 text-xs font-bold text-brand-700 hover:bg-brand-50 disabled:opacity-50">تعديل</button>
-                <button onClick={() => void remove(product)} disabled={busy||toggling!==null} className="rounded-xl border border-red-200 px-3.5 py-2 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-60">حذف</button>
+                <button type="button" disabled={busy||bulkBusy||excelBusy||toggling!==null} onClick={()=>void toggle(product)} aria-label={`${product.owner_hidden===true?"إظهار":"إخفاء"} ${product.name}`} title={!eligibleForDisplay(product)?"يمكن تغيير الإخفاء اليدوي. النشر للعملاء ينتظر اعتماد المنتج.":undefined} className={`min-w-20 rounded-xl border px-3.5 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50 ${product.owner_hidden!==true?"border-amber-200 bg-amber-50 text-amber-900":"border-emerald-200 bg-emerald-50 text-emerald-800"}`}>{toggling===product.id?"جارٍ الحفظ...":product.owner_hidden===true?"إظهار":"إخفاء"}</button>
+                <button disabled={busy||bulkBusy||excelBusy||toggling!==null} onClick={() => startEdit(product)} className="rounded-xl border border-brand-100 px-3.5 py-2 text-xs font-bold text-brand-700 hover:bg-brand-50 disabled:opacity-50">تعديل</button>
+                <button onClick={() => void remove(product)} disabled={busy||bulkBusy||excelBusy||toggling!==null} className="rounded-xl border border-red-200 px-3.5 py-2 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-60">حذف</button>
               </div>
             </article>
           ))}

@@ -1,6 +1,6 @@
-# Reviewed bulk product photos, implementation plan
+# Reviewed bulk product photos
 
-Status: matching and image-only assignment foundations are locally tested. No bulk UI is exposed yet. This plan is not a release claim.
+Status: implemented and tested locally, including the actual UI/client/Worker/data-layer path with disposable Auth and Firestore emulators. Not pushed, deployed or verified in the owner's production session. This is not a release claim.
 
 ## Existing foundations
 
@@ -12,7 +12,7 @@ Status: matching and image-only assignment foundations are locally tested. No bu
 
 ## Queue UI
 
-Implement `BulkProductPhotos` inside the products panel, separate from a single product's editor.
+`BulkProductPhotos` is inside the products panel, separate from a single product's editor. The following behavior is implemented locally.
 
 1. Explicitly open the batch panel and select files. Selection prepares images locally, it does not upload or save.
 2. Start with at most 50 files and a bounded total input size. Read and compress serially, not with an unbounded Promise.all.
@@ -29,7 +29,7 @@ Implement `BulkProductPhotos` inside the products panel, separate from a single 
 ## Upload and save
 
 - The owner explicitly starts eligible rows. No upload-on-selection or silent publication.
-- Run one image at a time, with about 3.5 seconds between uploads to stay below the native 20/minute limit. The provider remains the final quota/rate authority. Do not promise the whole daily free allowance to this feature.
+- Run one image at a time, with about 3.5 seconds between upload starts. The configured native guard is approximately 20 requests per minute per IP and owner within each Cloudflare location, not a strict global or daily quota. The provider remains the final quota/rate authority. Do not promise the whole daily free allowance to this feature.
 - Validate against the latest catalog before each row; the transaction checks again at commit.
 - Upload, retain the returned URL, then call the image-only assignment. Never bulk-save stale complete product objects.
 - Stop the batch on an upload/save failure rather than hammering quota/auth errors. Keep earlier saved rows and each returned upload URL.
@@ -62,6 +62,17 @@ Keep user-visible Arabic RTL readable at 320/390/1280px, with contained pack pre
 - No late writes after cancellation apart from an honestly reported commit already in flight.
 - Actual UI + actual client/helper/Worker + disposable Auth/Firestore services + in-memory KV for several-row save/reload.
 - Visual inspection at all three widths, including review, replacement, error, stop and partial-success states.
+
+## Verified local checkpoint, November 22, 2026
+
+- Production build passes, with the existing large main/Excel chunk warning.
+- 58 unit/backend checks and 20 Firestore rules/data-layer checks pass.
+- Synthetic browser checks cover all three widths, review/replacement consent, duplicate targets, bounded 50-image preparation, failure recovery, URL reuse, catalog conflicts, pacing, stop/unmount and object-URL cleanup.
+- Both single-image and three-row bulk actual-code integrations pass with production Firebase SDK 11.10.0. Three different images were saved and rendered again after reload through the actual media handler. A stale third-row image was blocked until refreshed and reviewed. Concurrent price, stock and description changes and manual hiding survived.
+- Image revisions detect app-controlled remove/readd of the same URL, deletion/recreation and stale full-editor overwrites. Price-only edits and workbook imports preserve the revision; changed images receive a new revision. An already-applied photo retry does not undo a later human review. Direct out-of-band writes that omit this metadata are not a universal history guarantee.
+- Local visual evidence includes review, replacement, stale, stopped, saved and actual-code reload states. External token lookup and local CORS are bridged for the emulator fixture. This is not evidence of production authentication, real KV propagation or the owner's live journey.
+
+See `PHOTO-UPLOAD.md` for reproducible commands and release checks. The rate-binding semantics are documented at https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/.
 
 ## Release gate
 
