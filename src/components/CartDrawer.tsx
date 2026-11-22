@@ -180,7 +180,7 @@ export default function CartDrawer() {
         {stage !== "done" && policy?.enabled && <section className="mx-4 mt-3 rounded-xl border border-brand-100 bg-brand-50 p-3 text-sm text-brand-950">
           <label className="block font-bold">منطقة التوصيل<select aria-label="منطقة التوصيل" disabled={checking||sending} value={zoneId} onChange={event=>{setZoneId(event.target.value);setError('')}} className="mt-2 w-full rounded-xl border border-brand-100 bg-white p-2.5 text-sm text-brand-950"><option value="">اختار منطقتك</option>{policy.zones.map(zone=><option key={zone.id} value={zone.id}>{zone.name}</option>)}</select></label>
           {shownQuote?.zone&&<><p className="mt-2">رسوم التوصيل: {formatPrice(shownQuote.fee_cents!/100)}</p><p className="mt-1 text-xs leading-6">مدة تقديرية: {shownQuote.zone.eta_min} إلى {shownQuote.zone.eta_max} دقيقة بعد تأكيد الصيدلية وتوفر الأصناف.</p></>}
-          <p className="mt-2 text-xs leading-6">المنطقة مش في القائمة؟ <a className="font-bold underline" href={`tel:${STORE.whatsappNumber}`}>كلم الصيدلية</a>. راجع أن عنوانك داخل المنطقة المختارة.</p>
+          <p className="mt-2 text-xs leading-6">المنطقة مش في القائمة؟ <a className="font-bold underline" href={`tel:+${STORE.whatsappNumber}`}>كلم الصيدلية</a>. راجع أن عنوانك داخل المنطقة المختارة.</p>
         </section>}
         {stage !== 'done'&&policyNotice&&<p role="status" className="mx-4 mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-950">{policyNotice}</p>}
         {stage === "cart" && error && <p role="alert" className="mx-4 mt-3 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-700">{error}</p>}
