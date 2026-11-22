@@ -25,8 +25,8 @@ globalThis.__appearanceFixture={set(value){appearance={...appearance,...value};l
 globalThis.__photoFixture={mode:'success',last:null};
 products[0].imageUrl='/qa/fixtures/product-photo.jpg';
 export const uploadProductPhoto=async(blob,signal)=>{
-  const bitmap=await createImageBitmap(blob);const bytes=new Uint8Array(await blob.arrayBuffer());globalThis.__photoFixture.last={type:blob.type,size:blob.size,width:bitmap.width,height:bitmap.height,metadataStripped:!new TextDecoder().decode(bytes).includes('QA-GEO-MARKER')};bitmap.close();
-  await new Promise(resolve=>setTimeout(resolve,250));
+  const bitmap=await createImageBitmap(blob);const bytes=new Uint8Array(await blob.arrayBuffer());const canvas=document.createElement('canvas');canvas.width=bitmap.width;canvas.height=bitmap.height;const ctx=canvas.getContext('2d');ctx.drawImage(bitmap,0,0);globalThis.__photoFixture.last={type:blob.type,size:blob.size,width:bitmap.width,height:bitmap.height,corner:Array.from(ctx.getImageData(0,0,1,1).data),metadataStripped:!new TextDecoder().decode(bytes).includes('QA-GEO-MARKER')};bitmap.close();
+  await new Promise(resolve=>setTimeout(resolve,globalThis.__photoFixture.mode==='slow'?1200:250));
   if(signal?.aborted)throw new Error('Synthetic cancelled upload');
   if(globalThis.__photoFixture.mode==='error')throw new Error('وصلت الخدمة المجانية لحد الاستخدام. حاول لاحقًا.');
   return location.origin+'/qa/fixtures/product-photo.jpg';

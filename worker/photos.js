@@ -3,6 +3,7 @@ export const PHOTO_MAX_EDGE=1200;
 export const PHOTO_ORIGIN='https://oneforallgood-assistant.oneforallgood-store.workers.dev';
 export const photoUrl=id=>PHOTO_ORIGIN+'/media/'+id;
 const validId=id=>/^[a-f0-9]{64}$/.test(id||'');
+const imageResponse=bytes=>new Response(bytes,{headers:{'Content-Type':'image/jpeg','Cache-Control':'public,max-age=86400,immutable','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox",'Access-Control-Allow-Origin':'*'}});
 export function jpegDimensions(bytes){
  if(bytes.length<12||bytes[0]!==255||bytes[1]!==216||bytes.at(-2)!==255||bytes.at(-1)!==217)return null;
  let i=2;let dimensions=null;
@@ -47,6 +48,9 @@ export async function uploadPhoto(request,env){
   const hash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(x=>x.toString(16).padStart(2,'0')).join('');
   const key='image:'+hash;
   if(!await env.PRODUCT_PHOTOS.get(key,{type:'arrayBuffer'}))await env.PRODUCT_PHOTOS.put(key,bytes,{metadata:{created_at:Date.now(),size:bytes.length,...dimensions}});
+  // KV is eventually consistent. Warm this edge from the verified upload bytes
+  // rather than relying on an immediate KV read for the owner's first preview.
+  try{if(globalThis.caches?.default)await globalThis.caches.default.put(new Request(photoUrl(hash)),imageResponse(bytes));}catch{}
   return {status:201,body:{ok:true,url:photoUrl(hash),bytes:bytes.length,...dimensions}};
  }catch{return {status:503,body:{error:'photo_storage_unavailable'}};}
 }
@@ -58,8 +62,8 @@ export async function servePhoto(id,env,ctx){
   const cache=globalThis.caches?.default;const key=new Request(photoUrl(id));
   if(cache){try{const hit=await cache.match(key);if(hit)return hit;}catch{}}
   const bytes=await env.PRODUCT_PHOTOS.get('image:'+id,{type:'arrayBuffer'});if(!bytes)return missing();
-  const response=new Response(bytes,{headers:{'Content-Type':'image/jpeg','Cache-Control':'public,max-age=86400,immutable','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox",'Access-Control-Allow-Origin':'*'}});
-  if(cache&&ctx){ctx.waitUntil(cache.put(key,response.clone()).catch(()=>{}));}
+  const response=imageResponse(bytes);
+  if(cache&&ctx){try{ctx.waitUntil(Promise.resolve(cache.put(key,response.clone())).catch(()=>{}));}catch{}}
   return response;
  }catch{return new Response('Image temporarily unavailable',{status:503,headers:{'Cache-Control':'no-store'}});}
 }
