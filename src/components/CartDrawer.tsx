@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useCart } from "../lib/cart";
 import { formatPrice } from "../lib/catalog";
 import { placeOrder } from "../lib/firebase";
+import { normalizeCheckoutPhone } from "../lib/checkoutPhone";
 import { STORE } from "../lib/site";
 import ProductImage from "./ProductImage";
 
@@ -33,7 +34,7 @@ export default function CartDrawer() {
     e.preventDefault();
     setError("");
     if(!accepting)return setError(appearanceError?"تعذر التحقق من حالة المتجر.":appearance.closed_message);
-    const phone = form.phone.replace(/[\s-]/g, "");
+    const phone = normalizeCheckoutPhone(form.phone);
     if (form.name.trim().length < 3) return setError("من فضلك اكتب الاسم بالكامل.");
     if (!/^(\+?20)?0?1[0-9]{9}$/.test(phone)) return setError("رقم الموبايل غير صحيح. اكتب الرقم كاملًا مثل 01012345678.");
     if (form.address.trim().length < 8) return setError("اكتب عنوانًا أوضح للتوصيل (منطقة وشارع ورقم).");
