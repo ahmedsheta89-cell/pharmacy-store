@@ -15,7 +15,7 @@ products[1].owner_hidden=true;products[1].public_visible=false;products[2].conte
 const productListeners=new Set();
 export const watchProducts=(cb,manager=false)=>{const notify=()=>cb(manager?[...products]:products.filter(p=>p.public_visible&&derivedVisibility(p)));productListeners.add(notify);queueMicrotask(notify);return ()=>productListeners.delete(notify);};
 export const getPublicProduct=async id=>products.find(p=>p.id===id&&p.public_visible&&derivedVisibility(p))||null;
-export const setProductHidden=async(id,hidden)=>{const p=products.find(p=>p.id===id);if(!hidden&&!eligibleForDisplay(p))throw new Error('Needs approval');p.owner_hidden=hidden;p.public_visible=derivedVisibility(p);productListeners.forEach(cb=>cb());};
+export const setProductHidden=async(id,hidden)=>{const p=products.find(p=>p.id===id);p.owner_hidden=hidden;p.public_visible=derivedVisibility(p);productListeners.forEach(cb=>cb());};
 export const watchOrders=cb=>emit(cb,[]),watchFeedback=cb=>emit(cb,[]),watchBanners=cb=>emit(cb,[{id:'qa-banner',title:'مساحة إعلان من الصيدلية',text:'بانر تجريبي للمعاينة فقط. تضيف الصورة والنص والرابط وتوقف ظهوره من لوحة الإدارة.',enabled:true,linkUrl:'/#catalog',linkLabel:'شوف المنتجات التجريبية'}]);
 export const managerSignOut=async()=>{},managerSignIn=async()=>{};
 export const lookupOrder=async()=>({status:'preparing',total:125,created_at:new Date().toISOString()}),placeOrder=async()=>({ok:true,orderCode:'QA-NOT-REAL'});

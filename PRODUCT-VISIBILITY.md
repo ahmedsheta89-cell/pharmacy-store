@@ -2,7 +2,7 @@
 
 - `owner_hidden` is independent of medical review, advertising eligibility and prescription classification. Missing means false for existing products.
 - `public_visible` remains the indexed public-query flag. It can be true only for a reviewed, advertising-approved, non-prescription/non-medicine product that is not manually hidden.
-- The product list has an immediate show/hide control and an explicit status badge. Drafts cannot be shown from the quick control; the row explains which approval fields to review in Edit.
+- The product list has an immediate show/hide control and an explicit status badge. The owner switch works on all records, including legacy drafts missing the new fields. Clearing manual hiding never grants approval; unreviewed rows remain private and show an explicit explanation.
 - Toggle writes only the two visibility fields in a transaction. It does not grant approvals or alter stock/prices.
 - Saving an old edit preserves the latest manual hide. XLSX import/update reads current records transactionally, preserves manual hiding, and resets all review/classification/advertising status to private drafts. Export includes `owner_hidden` for reference; import does not map it.
 - The storefront filters owner-hidden or ineligible products defensively. Firestore write rules enforce the visibility invariant. Public queries still use the existing `public_visible` index, with no data migration or new index required.
